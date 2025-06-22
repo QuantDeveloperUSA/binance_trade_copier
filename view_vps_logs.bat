@@ -9,11 +9,11 @@ echo Press Ctrl+C to stop monitoring
 echo.
 
 echo Method 1: Check Windows Event Logs for Python errors...
-ssh trader@5.181.5.168 "wevtutil qe Application /c:10 /rd:true /f:text | findstr python"
+ssh Administrator@5.181.5.168 "wevtutil qe Application /c:10 /rd:true /f:text | findstr python"
 echo.
 
 echo Method 2: Check if there are any log files in the application directory...
-ssh trader@5.181.5.168 "cd /d C:\Users\Administrator\binance_trade_copier && dir *.log"
+ssh Administrator@5.181.5.168 "cd /d C:\Users\Administrator\binance_trade_copier && dir *.log"
 echo.
 
 echo Method 3: Try to see Python output (if running in console)...
@@ -21,7 +21,7 @@ echo Note: Since Python runs with 'start /B', output goes to background
 echo.
 
 echo Method 4: Check process information...
-ssh trader@5.181.5.168 "tasklist /fi \"imagename eq python.exe\" /fo table /v"
+ssh Administrator@5.181.5.168 "tasklist /fi \"imagename eq python.exe\" /fo table /v"
 echo.
 
 echo To see real-time logs, you would need to:

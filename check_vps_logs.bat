@@ -9,7 +9,7 @@ echo    (You can also check: https://github.com/QuantDeveloperUSA/binance_trade_
 echo.
 
 echo 2. Checking if Python server is running on VPS...
-ssh trader@5.181.5.168 "tasklist | findstr python"
+ssh Administrator@5.181.5.168 "tasklist | findstr python"
 if errorlevel 1 (
     echo ❌ Python server not running
 ) else (
@@ -18,11 +18,11 @@ if errorlevel 1 (
 echo.
 
 echo 3. Checking Python server process details...
-ssh trader@5.181.5.168 "wmic process where \"name='python.exe'\" get ProcessId,CreationDate,CommandLine /format:table"
+ssh Administrator@5.181.5.168 "wmic process where \"name='python.exe'\" get ProcessId,CreationDate,CommandLine /format:table"
 echo.
 
 echo 4. Checking current git status on VPS...
-ssh trader@5.181.5.168 "cd /d C:\Users\Administrator\binance_trade_copier && git log --oneline -3"
+ssh Administrator@5.181.5.168 "cd /d C:\Users\Administrator\binance_trade_copier && git log --oneline -3"
 echo.
 
 echo 5. Checking if server is responding...
