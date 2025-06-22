@@ -16,10 +16,25 @@ jobs:
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
         port: 22
-        script_stop: false
+        timeout: 60s
+        command_timeout: 300s
+        script_stop: true
         script: |
-          cd /d C:\Users\Administrator\binance_trade_copier
+          echo "=== DEPLOYMENT START ==="
+          echo "Current time: %DATE% %TIME%"
+          cd /d "C:\Users\Administrator\binance_trade_copier"
+          echo "Current directory: %CD%"
+          echo "=== GIT PULL ==="
           git pull origin main
-          taskkill /F /IM python.exe 2>nul
-          timeout /t 3 /nobreak
+          echo "=== CURRENT COMMIT ==="
+          git log --oneline -1
+          echo "=== STOPPING PYTHON ==="
+          taskkill /F /IM python.exe 2>nul || echo "No Python process to stop"
+          echo "=== WAITING ==="
+          timeout /t 5 /nobreak
+          echo "=== STARTING PYTHON ==="
           start /B python main.py
+          echo "=== VERIFYING ==="
+          timeout /t 3 /nobreak
+          tasklist | findstr python || echo "Python not found in process list"
+          echo "=== DEPLOYMENT END ==="
