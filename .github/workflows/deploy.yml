@@ -36,8 +36,12 @@ jobs:
           taskkill /F /IM python.exe 2>nul
           echo "=== PYTHON STOPPED ==="
           ping 127.0.0.1 -n 4 > nul
+          echo "=== INSTALLING/UPDATING REQUIREMENTS ==="
+          pip install -r requirements.txt --quiet
           echo "=== STARTING PYTHON APPLICATION ==="
           start /B python main.py > deployment.log 2>&1
           echo "=== PYTHON STARTED ==="
-          ping 127.0.0.1 -n 3 > nul
+          ping 127.0.0.1 -n 6 > nul
+          echo "=== VERIFYING APPLICATION ==="
+          curl -s -m 10 http://localhost:8000 | findstr "Trade Copier" && echo "✅ Application verified" || echo "❌ Application verification failed"
           echo "=== DEPLOYMENT COMPLETE ==="
