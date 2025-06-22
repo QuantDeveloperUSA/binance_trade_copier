@@ -20,4 +20,24 @@ jobs:
         command_timeout: 600s
         script_stop: true
         debug: false
-        script: cd /d "C:\Users\Administrator\binance_trade_copier" && echo "=== DEPLOYMENT START ===" && git pull origin main && echo "=== GIT PULLED ===" && taskkill /F /IM python.exe 2>nul && echo "=== PYTHON STOPPED ===" && ping 127.0.0.1 -n 4 > nul && start /B python main.py && echo "=== PYTHON STARTED ===" && ping 127.0.0.1 -n 3 > nul && echo "=== DEPLOYMENT COMPLETE ==="
+        script: |
+          cd /d "C:\Users\Administrator\binance_trade_copier"
+          echo "=== DEPLOYMENT START ==="
+          echo "=== CLEANING PYTHON CACHE ==="
+          for /d /r . %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d"
+          del /s /q *.pyc 2>nul
+          echo "=== RESETTING GIT STATE ==="
+          git clean -fd
+          git reset --hard HEAD
+          echo "=== PULLING LATEST CHANGES ==="
+          git pull origin main
+          echo "=== GIT PULLED ==="
+          echo "=== STOPPING EXISTING PYTHON PROCESSES ==="
+          taskkill /F /IM python.exe 2>nul
+          echo "=== PYTHON STOPPED ==="
+          ping 127.0.0.1 -n 4 > nul
+          echo "=== STARTING PYTHON APPLICATION ==="
+          start /B python main.py > deployment.log 2>&1
+          echo "=== PYTHON STARTED ==="
+          ping 127.0.0.1 -n 3 > nul
+          echo "=== DEPLOYMENT COMPLETE ==="

@@ -20,7 +20,14 @@ from config import (
 )
 
 # Setup logging
-logging.basicConfig(level=LOG_LEVEL)
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('binance_trade_copier.log'),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
