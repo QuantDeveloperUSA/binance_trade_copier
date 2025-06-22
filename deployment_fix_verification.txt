@@ -1,0 +1,19 @@
+DEPLOYMENT FIX ATTEMPT - 2025-06-22
+=================================
+
+Fixed Issues:
+1. Removed conflicting deploy-powershell.yml workflow
+2. Updated deploy.yml to use inline commands instead of calling non-existent batch script
+3. Simplified deployment process
+
+This file should appear on VPS after successful deployment.
+If you see this file on the VPS, the deployment is working correctly.
+
+Deployment commands:
+- cd /d C:\Users\Administrator\binance_trade_copier
+- git pull origin main  
+- taskkill /F /IM python.exe 2>nul
+- timeout /t 3 /nobreak
+- start /B python main.py
+
+Expected result: Updated HTML titles showing "Binance Trade Copier"

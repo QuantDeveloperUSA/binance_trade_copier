@@ -16,4 +16,10 @@ jobs:
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
         port: 22
-        script: C:\Users\Administrator\binance_trade_copier\deploy_script.bat
+        script_stop: false
+        script: |
+          cd /d C:\Users\Administrator\binance_trade_copier
+          git pull origin main
+          taskkill /F /IM python.exe 2>nul
+          timeout /t 3 /nobreak
+          start /B python main.py
