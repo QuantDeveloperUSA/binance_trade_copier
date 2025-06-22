@@ -17,24 +17,11 @@ jobs:
         key: ${{ secrets.VPS_SSH_KEY }}
         port: 22
         script: |
-          Write-Host "Starting deployment..."
-          
-          # Navigate to project directory
+          echo Starting deployment...
           cd C:\Users\Administrator\binance_trade_copier
-          
-          # Pull latest changes from main branch
           git -c credential.helper= pull origin main
-          
-          # Install Python dependencies
-          if (Test-Path "requirements.txt") {
-              Write-Host "Installing Python dependencies..."
-              python -m pip install -r requirements.txt --upgrade
-          }
-          
-          # Kill existing Python processes for this app
-          Get-Process python -ErrorAction SilentlyContinue | Where-Object {$_.MainModule.FileName -like "*binance_trade_copier*"} | Stop-Process -Force
-          
-          # Start the application
-          Start-Process python -ArgumentList "main.py" -WorkingDirectory "C:\Users\Administrator\binance_trade_copier" -WindowStyle Hidden
-          
-          Write-Host "Deployment completed!"
+          if exist requirements.txt (
+            echo Installing Python dependencies...
+            python -m pip install -r requirements.txt --upgrade
+          )
+          echo Deployment completed!
