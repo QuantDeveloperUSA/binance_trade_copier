@@ -1,3 +1,0 @@
-Deployment test file created at 2025-01-27 - Testing enhanced PowerShell deployment script
-This file should appear on the VPS after successful deployment.
-Commit hash will be updated after git pull.

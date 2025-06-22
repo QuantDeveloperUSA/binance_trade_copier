@@ -1,4 +1,0 @@
-Force deployment at 2025-06-22 to update HTML titles to "Binance Trade Copier"
-This file confirms that the latest HTML changes should be deployed to the VPS.
-Local HTML file shows correct title: "Binance Trade Copier"
-VPS still shows old title: "Binance Copy Trading System"
