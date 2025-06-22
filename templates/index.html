@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binance Copy Trading System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .status-badge { font-size: 0.8rem; }
+        .trade-log { max-height: 400px; overflow-y: auto; }
+        .account-card { transition: all 0.3s; }
+        .account-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">Binance Copy Trading System</span>
+            <div>
+                <span id="systemStatus" class="badge bg-danger">Inactive</span>
+                <button id="toggleBtn" class="btn btn-success btn-sm ms-2">Start Copying</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <!-- Accounts Section -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Accounts</h5>
+                        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addAccountModal">
+                            Add Account
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="accountsList" class="row">
+                            <!-- Accounts will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trade Logs -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Recent Trades</h5>
+                    </div>
+                    <div class="card-body trade-log">
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Master</th>
+                                        <th>Slave</th>
+                                        <th>Symbol</th>
+                                        <th>Side</th>
+                                        <th>Quantity</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tradesTable">
+                                    <!-- Trades will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status Section -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">System Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="statusInfo">
+                            <!-- Status info will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Account Modal -->
+    <div class="modal fade" id="addAccountModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Account</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addAccountForm">
+                        <div class="mb-3">
+                            <label class="form-label">Account ID</label>
+                            <input type="text" class="form-control" id="accountId" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Type</label>
+                            <select class="form-select" id="accountType" required>
+                                <option value="master">Master</option>
+                                <option value="slave">Slave</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">API Key</label>
+                            <input type="text" class="form-control" id="apiKey" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">API Secret</label>
+                            <input type="password" class="form-control" id="apiSecret" required>
+                        </div>
+                        <div class="mb-3" id="multiplierGroup">
+                            <label class="form-label">Multiplier</label>
+                            <input type="number" class="form-control" id="multiplier" value="1.0" step="0.1" min="0.1">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="addAccount()">Add Account</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Location Warning Modal -->
+    <div class="modal fade" id="locationWarningModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">Location Restriction Detected</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Binance.com API access is restricted in your location. You have several options:</p>
+                    <ol>
+                        <li><strong>Use a VPN</strong> to connect from a supported location</li>
+                        <li><strong>Use Binance.US</strong> if you're in the United States (requires code modification)</li>
+                        <li><strong>Use Testnet</strong> for testing purposes (no real trading)</li>
+                    </ol>
+                    <div class="alert alert-info mt-3">
+                        <strong>Note:</strong> The provided API keys are for Binance.com (international) and won't work from restricted locations.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Account History Modal -->
+    <div class="modal fade" id="accountHistoryModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Account History - <span id="historyAccountId"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-tabs" id="historyTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="balance-tab" data-bs-toggle="tab" data-bs-target="#balance-pane" type="button">Balance</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="positions-tab" data-bs-toggle="tab" data-bs-target="#positions-pane" type="button">Positions</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="trades-tab" data-bs-toggle="tab" data-bs-target="#trades-pane" type="button">Trades</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="deposits-tab" data-bs-toggle="tab" data-bs-target="#deposits-pane" type="button">Deposits</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content mt-3" id="historyTabContent">
+                        <div class="tab-pane fade show active" id="balance-pane" role="tabpanel">
+                            <div id="balanceDetails"></div>
+                        </div>
+                        <div class="tab-pane fade" id="positions-pane" role="tabpanel">
+                            <div id="positionsTable"></div>
+                        </div>
+                        <div class="tab-pane fade" id="trades-pane" role="tabpanel">
+                            <div id="tradesHistoryTable"></div>
+                        </div>
+                        <div class="tab-pane fade" id="deposits-pane" role="tabpanel">
+                            <div id="depositsTable"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let copyingActive = false;
+        let locationWarningShown = false;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAccounts();
+            loadStatus();
+            loadTrades();
+            
+            // Refresh data every 5 seconds
+            setInterval(() => {
+                loadStatus();
+                loadTrades();
+            }, 5000);
+
+            // Toggle button handler
+            document.getElementById('toggleBtn').addEventListener('click', toggleCopying);
+
+            // Account type change handler
+            document.getElementById('accountType').addEventListener('change', function() {
+                document.getElementById('multiplierGroup').style.display = 
+                    this.value === 'slave' ? 'block' : 'none';
+            });
+        });
+
+        async function loadAccounts() {
+            try {
+                const response = await fetch('/api/accounts');
+                const data = await response.json();
+                
+                const container = document.getElementById('accountsList');
+                container.innerHTML = '';
+                
+                data.accounts.forEach(account => {
+                    const card = document.createElement('div');
+                    card.className = 'col-md-6 mb-3';
+                    card.innerHTML = `
+                        <div class="card account-card ${account.active ? '' : 'bg-light'}">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="card-title">${account.id}</h6>
+                                        <span class="badge ${account.type === 'master' ? 'bg-primary' : 'bg-info'}">${account.type}</span>
+                                        <span class="badge ${account.active ? 'bg-success' : 'bg-secondary'}">${account.active ? 'Active' : 'Inactive'}</span>
+                                    </div>
+                                    <div>
+                                        <button class="btn btn-sm btn-info me-1" onclick="viewAccountHistory('${account.id}')" title="View History">📊</button>
+                                        <button class="btn btn-sm btn-danger" onclick="deleteAccount('${account.id}')">×</button>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <small class="text-muted">API Key: ${account.api_key.substring(0, 10)}...</small>
+                                    ${account.type === 'slave' ? `<br><small class="text-muted">Multiplier: ${account.multiplier}x</small>` : ''}
+                                </div>
+                                <div id="balance-${account.id}" class="mt-2">
+                                    <small class="text-muted">Balance: Loading...</small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+                
+                // Load detailed balances for each account
+                data.accounts.forEach(account => {
+                    loadAccountBalance(account.id);
+                });
+            } catch (error) {
+                console.error('Error loading accounts:', error);
+            }
+        }
+
+        async function loadAccountBalance(accountId) {
+            try {
+                const response = await fetch(`/api/accounts/${accountId}/balance`);
+                if (response.ok) {
+                    const balance = await response.json();
+                    const balanceEl = document.getElementById(`balance-${accountId}`);
+                    if (balanceEl) {
+                        let html = `<small class="text-muted">Balance: $${balance.total_wallet.toFixed(2)}</small>`;
+                        if (balance.unrealized_pnl !== 0) {
+                            const pnlClass = balance.unrealized_pnl > 0 ? 'text-success' : 'text-danger';
+                            html += `<br><small class="${pnlClass}">Unrealized PnL: $${balance.unrealized_pnl.toFixed(2)}</small>`;
+                        }
+                        balanceEl.innerHTML = html;
+                    }
+                }
+            } catch (error) {
+                console.error(`Error loading balance for ${accountId}:`, error);
+            }
+        }
+
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                copyingActive = data.copying_active;
+                
+                // Update UI
+                const statusBadge = document.getElementById('systemStatus');
+                const toggleBtn = document.getElementById('toggleBtn');
+                
+                if (copyingActive) {
+                    statusBadge.textContent = 'Active';
+                    statusBadge.className = 'badge bg-success';
+                    toggleBtn.textContent = 'Stop Copying';
+                    toggleBtn.className = 'btn btn-danger btn-sm ms-2';
+                } else {
+                    statusBadge.textContent = 'Inactive';
+                    statusBadge.className = 'badge bg-danger';
+                    toggleBtn.textContent = 'Start Copying';
+                    toggleBtn.className = 'btn btn-success btn-sm ms-2';
+                }
+                
+                // Update status info
+                const statusInfo = document.getElementById('statusInfo');
+                let html = `<p><strong>Status:</strong> ${copyingActive ? 'Active' : 'Inactive'}</p>`;
+                
+                if (data.started_at) {
+                    const startTime = new Date(data.started_at);
+                    html += `<p><strong>Started:</strong> ${startTime.toLocaleString()}</p>`;
+                }
+                
+                html += '<hr><h6>Connection Status</h6>';
+                
+                let hasLocationError = false;
+                
+                for (const [accountId, status] of Object.entries(data.connections)) {
+                    let statusIcon = '🔴';
+                    let statusText = 'Disconnected';
+                    
+                    if (status.connected) {
+                        statusIcon = '🟢';
+                        statusText = 'Connected';
+                    } else if (status.available) {
+                        statusIcon = '🟡';
+                        statusText = 'Available';
+                    }
+                    
+                    html += `<p>${accountId}: ${statusIcon} ${statusText}`;
+                    
+                    if (status.balance > 0) {
+                        html += ` - Balance: $${status.balance.toFixed(2)}`;
+                        // Update balance in account card
+                        const balanceEl = document.getElementById(`balance-${accountId}`);
+                        if (balanceEl) {
+                            balanceEl.innerHTML = `<small class="text-muted">Balance: $${status.balance.toFixed(2)}</small>`;
+                        }
+                    } else if (status.error) {
+                        // Check for location restriction
+                        if (status.error.includes('Location restricted')) {
+                            hasLocationError = true;
+                            html += ` - <small class="text-danger">⚠️ ${status.error}</small>`;
+                        } else {
+                            html += ` - <small class="text-danger">${status.error}</small>`;
+                        }
+                        
+                        // Update balance in account card with error
+                        const balanceEl = document.getElementById(`balance-${accountId}`);
+                        if (balanceEl) {
+                            if (status.error.includes('Location restricted')) {
+                                balanceEl.innerHTML = `<small class="text-danger">⚠️ Location Restricted</small>`;
+                            } else {
+                                balanceEl.innerHTML = `<small class="text-danger">Error: ${status.error}</small>`;
+                            }
+                        }
+                    } else {
+                        // Update balance in account card
+                        const balanceEl = document.getElementById(`balance-${accountId}`);
+                        if (balanceEl) {
+                            balanceEl.innerHTML = `<small class="text-muted">Balance: $0.00</small>`;
+                        }
+                    }
+                    html += '</p>';
+                }
+                
+                // Show location warning modal if needed
+                if (hasLocationError && !locationWarningShown) {
+                    locationWarningShown = true;
+                    const modal = new bootstrap.Modal(document.getElementById('locationWarningModal'));
+                    modal.show();
+                }
+                
+                statusInfo.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading status:', error);
+            }
+        }
+
+        async function loadTrades() {
+            try {
+                const response = await fetch('/api/trades?limit=50');
+                const data = await response.json();
+                
+                const tbody = document.getElementById('tradesTable');
+                tbody.innerHTML = '';
+                
+                data.trades.reverse().forEach(trade => {
+                    const row = tbody.insertRow();
+                    const time = new Date(trade.timestamp).toLocaleTimeString();
+                    
+                    row.innerHTML = `
+                        <td>${time}</td>
+                        <td>${trade.master_id}</td>
+                        <td>${trade.slave_id}</td>
+                        <td>${trade.symbol}</td>
+                        <td><span class="badge ${trade.side === 'BUY' ? 'bg-success' : 'bg-danger'}">${trade.side}</span></td>
+                        <td>${trade.quantity}</td>
+                        <td>
+                            <span class="badge ${trade.status === 'success' ? 'bg-success' : 'bg-danger'}">
+                                ${trade.status}
+                            </span>
+                            ${trade.error ? `<br><small class="text-danger">${trade.error}</small>` : ''}
+                        </td>
+                    `;
+                });
+            } catch (error) {
+                console.error('Error loading trades:', error);
+            }
+        }
+
+        async function toggleCopying() {
+            try {
+                const endpoint = copyingActive ? '/api/stop' : '/api/start';
+                const response = await fetch(endpoint, { method: 'POST' });
+                const data = await response.json();
+                
+                alert(data.message);
+                loadStatus();
+            } catch (error) {
+                console.error('Error toggling copying:', error);
+                alert('Error toggling copying status');
+            }
+        }
+
+        async function addAccount() {
+            const formData = {
+                id: document.getElementById('accountId').value,
+                type: document.getElementById('accountType').value,
+                api_key: document.getElementById('apiKey').value,
+                api_secret: document.getElementById('apiSecret').value,
+                multiplier: parseFloat(document.getElementById('multiplier').value) || 1.0,
+                active: true
+            };
+            
+            try {
+                const response = await fetch('/api/accounts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                
+                if (response.ok) {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('addAccountModal'));
+                    modal.hide();
+                    document.getElementById('addAccountForm').reset();
+                    loadAccounts();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.detail}`);
+                }
+            } catch (error) {
+                console.error('Error adding account:', error);
+                alert('Error adding account');
+            }
+        }
+
+        async function deleteAccount(accountId) {
+            if (!confirm(`Delete account ${accountId}?`)) return;
+            
+            try {
+                const response = await fetch(`/api/accounts/${accountId}`, { method: 'DELETE' });
+                
+                if (response.ok) {
+                    loadAccounts();
+                } else {
+                    alert('Error deleting account');
+                }
+            } catch (error) {
+                console.error('Error deleting account:', error);
+                alert('Error deleting account');
+            }
+        }
+
+        async function viewAccountHistory(accountId) {
+            document.getElementById('historyAccountId').textContent = accountId;
+            
+            // Show loading state
+            document.getElementById('balanceDetails').innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
+            document.getElementById('positionsTable').innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
+            document.getElementById('tradesHistoryTable').innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
+            document.getElementById('depositsTable').innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
+            
+            const modal = new bootstrap.Modal(document.getElementById('accountHistoryModal'));
+            modal.show();
+            
+            try {
+                const response = await fetch(`/api/accounts/${accountId}/history`);
+                const history = await response.json();
+                
+                // Display balance details
+                const balanceHtml = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6>Total Wallet Balance</h6>
+                                    <h4>$${history.current_balance.total.toFixed(2)}</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6>Available Balance</h6>
+                                    <h4>$${history.current_balance.available.toFixed(2)}</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6>Total Margin</h6>
+                                    <h4>$${history.current_balance.margin.toFixed(2)}</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6>Unrealized PnL</h6>
+                                    <h4 class="${history.current_balance.unrealized_pnl >= 0 ? 'text-success' : 'text-danger'}">
+                                        $${history.current_balance.unrealized_pnl.toFixed(2)}
+                                    </h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('balanceDetails').innerHTML = balanceHtml;
+                
+                // Display positions
+                if (history.positions.length > 0) {
+                    let positionsHtml = '<table class="table table-sm"><thead><tr><th>Symbol</th><th>Side</th><th>Amount</th><th>Entry Price</th><th>Mark Price</th><th>PnL</th></tr></thead><tbody>';
+                    history.positions.forEach(pos => {
+                        positionsHtml += `
+                            <tr>
+                                <td>${pos.symbol}</td>
+                                <td><span class="badge ${pos.side === 'LONG' ? 'bg-success' : 'bg-danger'}">${pos.side}</span></td>
+                                <td>${Math.abs(pos.amount)}</td>
+                                <td>$${pos.entry_price.toFixed(2)}</td>
+                                <td>$${pos.mark_price.toFixed(2)}</td>
+                                <td class="${pos.pnl >= 0 ? 'text-success' : 'text-danger'}">$${pos.pnl.toFixed(2)}</td>
+                            </tr>
+                        `;
+                    });
+                    positionsHtml += '</tbody></table>';
+                    document.getElementById('positionsTable').innerHTML = positionsHtml;
+                } else {
+                    document.getElementById('positionsTable').innerHTML = '<p class="text-muted">No open positions</p>';
+                }
+                
+                // Display trade history
+                if (history.trade_history.length > 0) {
+                    let tradesHtml = '<table class="table table-sm"><thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Price</th><th>Quantity</th><th>PnL</th></tr></thead><tbody>';
+                    history.trade_history.slice(0, 50).forEach(trade => {
+                        const time = new Date(trade.time).toLocaleString();
+                        tradesHtml += `
+                            <tr>
+                                <td>${time}</td>
+                                <td>${trade.symbol}</td>
+                                <td><span class="badge ${trade.side === 'BUY' ? 'bg-success' : trade.side === 'SELL' ? 'bg-danger' : 'bg-info'}">${trade.side}</span></td>
+                                <td>${trade.price > 0 ? '$' + trade.price.toFixed(2) : 'N/A'}</td>
+                                <td>${trade.qty > 0 ? trade.qty : 'N/A'}</td>
+                                <td class="${trade.realized_pnl >= 0 ? 'text-success' : 'text-danger'}">$${trade.realized_pnl.toFixed(2)}</td>
+                            </tr>
+                        `;
+                    });
+                    tradesHtml += '</tbody></table>';
+                    document.getElementById('tradesHistoryTable').innerHTML = tradesHtml;
+                } else {
+                    document.getElementById('tradesHistoryTable').innerHTML = '<p class="text-muted">No recent trades</p>';
+                }
+                
+                // Display deposits
+                if (history.deposit_history.length > 0) {
+                    let depositsHtml = '<table class="table table-sm"><thead><tr><th>Time</th><th>Coin</th><th>Amount</th><th>Status</th></tr></thead><tbody>';
+                    history.deposit_history.forEach(deposit => {
+                        const time = new Date(deposit.time).toLocaleString();
+                        depositsHtml += `
+                            <tr>
+                                <td>${time}</td>
+                                <td>${deposit.coin}</td>
+                                <td>${deposit.amount}</td>
+                                <td>${deposit.status}</td>
+                            </tr>
+                        `;
+                    });
+                    depositsHtml += '</tbody></table>';
+                    document.getElementById('depositsTable').innerHTML = depositsHtml;
+                } else {
+                    document.getElementById('depositsTable').innerHTML = '<p class="text-muted">No deposit history</p>';
+                }
+                
+            } catch (error) {
+                console.error('Error loading account history:', error);
+                alert('Error loading account history. Check console for details.');
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binance Copy Trading System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .status-active { color: green; }
+        .status-inactive { color: red; }
+        .trade-success { background-color: #d4edda; }
+        .trade-failed { background-color: #f8d7da; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1>Binance Copy Trading System</h1>
+        
+        <!-- Login Modal -->
+        <div id="loginModal" class="modal fade show" style="display: block;">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Admin Login</h5>
+                    </div>
+                    <div class="modal-body">
+                        <form id="loginForm">
+                            <div class="mb-3">
+                                <label for="password" class="form-label">Password</label>
+                                <input type="password" class="form-control" id="password" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Login</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content (hidden until login) -->
+        <div id="mainContent" style="display: none;">
+            <!-- Add Account Form -->
+            <div class="card mb-4">
+                <div class="card-header">Add Account</div>
+                <div class="card-body">
+                    <!-- Alert for feedback -->
+                    <div id="accountAlert" class="alert" style="display: none;" role="alert"></div>
+                    
+                    <form id="addAccountForm">
+                        <div class="row">
+                            <div class="col-md-2">
+                                <select class="form-control" id="accountType" required>
+                                    <option value="master">Master</option>
+                                    <option value="slave">Slave</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-control" id="accountMode" required>
+                                    <option value="spot">Spot</option>
+                                    <option value="futures">Futures</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <input type="text" class="form-control" id="accountName" placeholder="Account Name" required>
+                            </div>
+                            <div class="col-md-2">
+                                <input type="text" class="form-control" id="apiKey" placeholder="API Key" required>
+                            </div>
+                            <div class="col-md-2">
+                                <input type="password" class="form-control" id="apiSecret" placeholder="API Secret" required>
+                            </div>
+                            <div class="col-md-2" id="slaveOptions" style="display: none;">
+                                <select class="form-control" id="masterId"></select>
+                                <div class="mt-2">
+                                    <input type="number" class="form-control" id="multiplier" placeholder="Balance Multiplier" value="1.0" step="0.1">
+                                    <input type="number" class="form-control mt-1" id="fixedRatio" placeholder="Fixed Ratio (optional)" step="0.1">
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary" id="addAccountBtn">
+                                    <span id="btnText">Add Account</span>
+                                    <span id="btnSpinner" class="spinner-border spinner-border-sm" style="display: none;"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="card mb-4">
+                <div class="card-header">System Status</div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <strong>Active Masters:</strong> <span id="activeMasters">0</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Total Accounts:</strong> <span id="totalAccounts">0</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Exchange:</strong> <span id="exchange">-</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Status:</strong> <span id="systemStatus" class="status-active">Online</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Binance Time:</strong> <span id="binanceTime">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Accounts Table -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    Active Accounts
+                    <button class="btn btn-sm btn-secondary float-right" onclick="refreshAccounts()">Refresh</button>
+                </div>
+                <div class="card-body">
+                    <table class="table" id="accountsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Type</th>
+                                <th>Mode</th>
+                                <th>Name</th>
+                                <th>Balance</th>
+                                <th>Multiplier</th>
+                                <th>Fixed Ratio</th>
+                                <th>Master</th>
+                                <th>DB Status</th>
+                                <th>Connection</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Recent Trades -->
+            <div class="card">
+                <div class="card-header">Recent Trades</div>
+                <div class="card-body">
+                    <table class="table" id="tradesTable">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Slave ID</th>
+                                <th>Symbol</th>
+                                <th>Side</th>
+                                <th>Quantity</th>
+                                <th>Price</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isAuthenticated = false;
+        let masterAccounts = [];
+
+        // Helper function to show alerts
+        function showAlert(elementId, message, type = 'danger') {
+            const alertElement = document.getElementById(elementId);
+            alertElement.className = `alert alert-${type}`;
+            alertElement.textContent = message;
+            alertElement.style.display = 'block';
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                alertElement.style.display = 'none';
+            }, 5000);
+        }
+
+        // Helper function to toggle button loading state
+        function setButtonLoading(buttonId, isLoading) {
+            const button = document.getElementById(buttonId);
+            const btnText = document.getElementById('btnText');
+            const btnSpinner = document.getElementById('btnSpinner');
+            
+            button.disabled = isLoading;
+            btnText.style.display = isLoading ? 'none' : 'inline';
+            btnSpinner.style.display = isLoading ? 'inline-block' : 'none';
+        }
+
+        // Login
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('/auth', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: `password=${encodeURIComponent(password)}`
+                });
+                
+                if (response.ok) {
+                    isAuthenticated = true;
+                    document.getElementById('loginModal').style.display = 'none';
+                    document.getElementById('mainContent').style.display = 'block';
+                    loadAccounts();
+                    loadTrades();
+                    setInterval(loadAccounts, 5000);
+                    setInterval(loadTrades, 3000);
+                } else {
+                    alert('Invalid password');
+                }
+            } catch (error) {
+                alert('Login failed: ' + error);
+            }
+        });
+
+        // Show/hide slave options
+        document.getElementById('accountType').addEventListener('change', (e) => {
+            const slaveOptions = document.getElementById('slaveOptions');
+            const masterId = document.getElementById('masterId');
+            
+            if (e.target.value === 'slave') {
+                slaveOptions.style.display = 'block';
+                masterId.required = true;
+                
+                // Check if there are master accounts
+                if (masterAccounts.length === 0) {
+                    showAlert('accountAlert', 'No master accounts available. Please add a master account first.', 'warning');
+                }
+            } else {
+                slaveOptions.style.display = 'none';
+                masterId.required = false;
+            }
+        });
+
+        // Add account mode change handler
+        document.getElementById('accountMode').addEventListener('change', (e) => {
+            if (e.target.value === 'futures') {
+                // Check if using Binance US
+                fetch('/api/status')
+                    .then(response => response.json())
+                    .then(status => {
+                        if (status.exchange === 'US') {
+                            showAlert('accountAlert', 'Futures trading is not available on Binance US. Please use spot trading.', 'warning');
+                            document.getElementById('accountMode').value = 'spot';
+                        }
+                    });
+            }
+        });
+
+        // Add account with fixed ratio support
+        document.getElementById('addAccountForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            console.log('Adding account...'); // Debug log
+            
+            setButtonLoading('addAccountBtn', true);
+            
+            const formData = new URLSearchParams();
+            formData.append('account_type', document.getElementById('accountType').value);
+            formData.append('account_mode', document.getElementById('accountMode').value);  // Add account mode
+            formData.append('name', document.getElementById('accountName').value);
+            formData.append('api_key', document.getElementById('apiKey').value);
+            formData.append('api_secret', document.getElementById('apiSecret').value);
+            
+            if (document.getElementById('accountType').value === 'slave') {
+                const masterIdValue = document.getElementById('masterId').value;
+                if (!masterIdValue) {
+                    showAlert('accountAlert', 'Please select a master account', 'danger');
+                    setButtonLoading('addAccountBtn', false);
+                    return;
+                }
+                formData.append('master_id', masterIdValue);
+                formData.append('multiplier', document.getElementById('multiplier').value || '1.0');
+                
+                const fixedRatio = document.getElementById('fixedRatio').value;
+                if (fixedRatio) {
+                    formData.append('fixed_ratio', fixedRatio);
+                }
+            }
+            
+            try {
+                console.log('Sending request to /api/accounts'); // Debug log
+                
+                const response = await fetch('/api/accounts', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: formData
+                });
+                
+                console.log('Response status:', response.status); // Debug log
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showAlert('accountAlert', `Account "${document.getElementById('accountName').value}" added successfully!`, 'success');
+                    document.getElementById('addAccountForm').reset();
+                    document.getElementById('accountType').value = 'master'; // Reset to master
+                    document.getElementById('slaveOptions').style.display = 'none';
+                    await loadAccounts();
+                    await loadSystemStatus();
+                } else {
+                    const errorText = await response.text();
+                    console.error('Error response:', errorText); // Debug log
+                    showAlert('accountAlert', `Failed to add account: ${errorText}`, 'danger');
+                }
+            } catch (error) {
+                console.error('Network error:', error); // Debug log
+                showAlert('accountAlert', `Network error: ${error.message}`, 'danger');
+            } finally {
+                setButtonLoading('addAccountBtn', false);
+            }
+        });
+
+        // Load system status
+        async function loadSystemStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const status = await response.json();
+                
+                document.getElementById('activeMasters').textContent = status.active_masters;
+                document.getElementById('totalAccounts').textContent = status.total_accounts;
+                document.getElementById('exchange').textContent = status.exchange.toUpperCase();
+            } catch (error) {
+                console.error('Failed to load system status:', error);
+            }
+        }
+
+        // Enhanced account loading with all features
+        async function loadAccounts() {
+            try {
+                const response = await fetch('/api/accounts');
+                const accounts = await response.json();
+                
+                // Update master accounts dropdown
+                masterAccounts = accounts.filter(a => a.type === 'master');
+                const masterSelect = document.getElementById('masterId');
+                
+                if (masterAccounts.length === 0) {
+                    masterSelect.innerHTML = '<option value="">No master accounts available</option>';
+                } else {
+                    masterSelect.innerHTML = '<option value="">Select Master Account</option>' + 
+                        masterAccounts.map(a => 
+                            `<option value="${a.id}">${a.name} (ID: ${a.id})</option>`
+                        ).join('');
+                }
+                
+                // Update accounts table
+                const tbody = document.querySelector('#accountsTable tbody');
+                tbody.innerHTML = accounts.map(a => `
+                    <tr>
+                        <td>${a.id}</td>
+                        <td><span class="badge bg-${a.type === 'master' ? 'primary' : 'secondary'}">${a.type}</span></td>
+                        <td><span class="badge bg-${a.mode === 'futures' ? 'warning' : 'info'}">${a.mode}</span></td>
+                        <td>${a.name}</td>
+                        <td>$${a.balance.toFixed(2)}</td>
+                        <td>${a.type === 'slave' ? (a.multiplier || '1.0') : '-'}</td>
+                        <td>${a.type === 'slave' && a.fixed_ratio ? a.fixed_ratio : '-'}</td>
+                        <td>${a.master_id || '-'}</td>
+                        <td class="${a.is_active ? 'status-active' : 'status-inactive'}">
+                            ${a.is_active ? 'Active' : 'Inactive'}
+                        </td>
+                        <td class="${getConnectionStatusClass(a.connection_status)}">
+                            ${formatConnectionStatus(a.connection_status)}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm ${a.is_active ? 'btn-warning' : 'btn-success'}" 
+                                    onclick="toggleAccount(${a.id})">
+                                ${a.is_active ? 'Stop' : 'Start'}
+                            </button>
+                            <button class="btn btn-sm btn-info" onclick="testConnection(${a.id})">Test</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteAccount(${a.id})">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+                
+                console.log('Loaded', accounts.length, 'accounts'); // Debug log
+            } catch (error) {
+                console.error('Failed to load accounts:', error);
+                showAlert('accountAlert', 'Failed to load accounts', 'danger');
+            }
+        }
+
+        // Helper function to format connection status
+        function formatConnectionStatus(status) {
+            switch(status) {
+                case 'LOCATION_RESTRICTED':
+                    return 'Location Restricted';
+                case 'FUTURES_NOT_AVAILABLE':
+                    return 'Futures N/A';
+                default:
+                    return status || 'UNKNOWN';
+            }
+        }
+
+        // Helper function for connection status styling
+        function getConnectionStatusClass(status) {
+            switch(status) {
+                case 'CONNECTED':
+                case 'MONITORING':
+                    return 'status-active';
+                case 'INVALID_API_KEY':
+                case 'CONNECTION_ERROR':
+                case 'WEBSOCKET_ERROR':
+                case 'API_ERROR':
+                case 'LOCATION_RESTRICTED':
+                case 'FUTURES_NOT_AVAILABLE':
+                    return 'status-inactive';
+                default:
+                    return '';
+            }
+        }
+
+        // Test connection function
+        async function testConnection(accountId) {
+            try {
+                const response = await fetch(`/api/connection-status/${accountId}`);
+                const result = await response.json();
+                alert(`Connection Status: ${result.status}\nBalance: $${result.balance || 'N/A'}`);
+                loadAccounts(); // Refresh to show updated status
+            } catch (error) {
+                alert('Error testing connection: ' + error);
+            }
+        }
+
+        // Load trades
+        async function loadTrades() {
+            try {
+                const response = await fetch('/api/trades');
+                const trades = await response.json();
+                
+                const tbody = document.querySelector('#tradesTable tbody');
+                tbody.innerHTML = trades.map(t => `
+                    <tr class="${t.status === 'SUCCESS' ? 'trade-success' : 'trade-failed'}">
+                        <td>${new Date(t.timestamp).toLocaleString()}</td>
+                        <td>${t.slave_account_id}</td>
+                        <td>${t.symbol}</td>
+                        <td>${t.side}</td>
+                        <td>${t.quantity}</td>
+                        <td>${t.price || '-'}</td>
+                        <td>${t.status}</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load trades:', error);
+            }
+        }
+
+        // Toggle account
+        async function toggleAccount(accountId) {
+            try {
+                const response = await fetch(`/api/accounts/${accountId}/toggle`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    loadAccounts();
+                } else {
+                    alert('Failed to toggle account');
+                }
+            } catch (error) {
+                alert('Error: ' + error);
+            }
+        }
+
+        // Delete account function
+        async function deleteAccount(accountId) {
+            if (confirm('Are you sure you want to delete this account?')) {
+                try {
+                    const response = await fetch(`/api/accounts/${accountId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        loadAccounts();
+                        loadSystemStatus();
+                    } else {
+                        alert('Failed to delete account');
+                    }
+                } catch (error) {
+                    alert('Error: ' + error);
+                }
+            }
+        }
+
+        function refreshAccounts() {
+            loadAccounts();
+            loadSystemStatus();
+        }
+
+        // Update intervals
+        if (isAuthenticated) {
+            loadSystemStatus();
+            setInterval(loadSystemStatus, 10000); // Update every 10 seconds
+        }
+
+        async function checkBinanceTime() {
+            try {
+                const response = await fetch('/api/binance-time');
+                const data = await response.json();
+                if (data.time) {
+                    document.getElementById('binanceTime').textContent = new Date(Number(data.time)).toLocaleTimeString();
+                } else {
+                    document.getElementById('binanceTime').textContent = 'Error';
+                }
+            } catch (error) {
+                document.getElementById('binanceTime').textContent = 'Error';
+            }
+        }
+
+        // Call it periodically
+        setInterval(checkBinanceTime, 5000);
+        checkBinanceTime();
+    </script>
+</body>
+</html>
