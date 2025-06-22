@@ -19,31 +19,5 @@ jobs:
         timeout: 120s
         command_timeout: 600s
         script_stop: true
-        debug: true
-        script: |
-          echo "=== STARTING DEPLOYMENT ==="
-          echo "Host: %COMPUTERNAME%"
-          echo "User: %USERNAME%"
-          echo "Time: %DATE% %TIME%"
-          cd /d "C:\Users\Administrator\binance_trade_copier" || exit /b 1
-          echo "=== CURRENT DIRECTORY ==="
-          cd
-          echo "=== GIT STATUS BEFORE ==="
-          git status --porcelain
-          git log --oneline -1
-          echo "=== PULLING CHANGES ==="
-          git pull origin main || exit /b 1
-          echo "=== GIT STATUS AFTER ==="
-          git status --porcelain
-          git log --oneline -1
-          echo "=== STOPPING PYTHON ==="
-          taskkill /F /IM python.exe 2>nul
-          echo "=== WAITING FOR STOP ==="
-          timeout /t 5 /nobreak
-          echo "=== STARTING PYTHON ==="
-          start /B python main.py
-          echo "=== WAITING FOR START ==="
-          timeout /t 3 /nobreak
-          echo "=== VERIFYING PROCESS ==="
-          tasklist | findstr python
-          echo "=== DEPLOYMENT COMPLETE ==="
+        debug: false
+        script: cd /d "C:\Users\Administrator\binance_trade_copier" && echo "=== DEPLOYMENT START ===" && git pull origin main && echo "=== GIT PULLED ===" && taskkill /F /IM python.exe 2>nul && echo "=== PYTHON STOPPED ===" && timeout /t 3 /nobreak && start /B python main.py && echo "=== PYTHON STARTED ===" && timeout /t 2 /nobreak && tasklist | findstr python && echo "=== DEPLOYMENT COMPLETE ==="
