@@ -14,14 +14,14 @@ jobs:
       with:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USERNAME }}
-        key: ${{ secrets.VPS_SSH_KEY }}
+        password: ${{ secrets.VPS_PASSWORD }}
         port: 22
         timeout: 120s
         command_timeout: 600s
         script_stop: true
         debug: false
         script: |
-          cd /d "C:\Users\Administrator\binance_trade_copier"
+          cd /d "C:\Users\trader\binance_trade_copier"
           echo "=== DEPLOYMENT START ==="
           echo "=== CLEANING PYTHON CACHE ==="
           for /d /r . %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d"
