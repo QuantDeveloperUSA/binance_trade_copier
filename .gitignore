@@ -45,3 +45,20 @@ htmlcov/
 # Environment variables
 .env
 .env.local
+
+# SSH Keys and Security (NEVER commit private keys!)
+**/ssh_config/vps_key
+**/ssh_config/*_key
+**/ssh_config/*.pem
+**/ssh_config/*.key
+**/ssh_config/id_*
+!**/ssh_config/*.pub
+ssh_config/known_hosts
+ssh_config/authorized_keys
+
+# Credentials and passwords
+**/credentials.txt
+**/passwords.txt
+**/secrets.txt
+**/*_credentials.*
+**/*_secrets.*
