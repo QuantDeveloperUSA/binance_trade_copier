@@ -1,241 +1,170 @@
-# Binance Trade Copier - Auto Deployment Guide
+# GitHub Actions Deployment Setup Instructions
 
-This document explains how to set up auto-deployment from GitHub to your Windows VPS using GitHub Actions.
+## Overview
+This repository is configured with GitHub Actions to automatically deploy the Binance Trade Copier to your Windows VPS whenever you push to the main branch.
 
-## Prerequisites
+## Prerequisites Setup
 
-1. **VPS Setup**: Windows Server 2022 Standard with SSH access
-2. **Local Setup**: Windows 11 with VS Code and GitHub Copilot
-3. **Repository**: GitHub repository with this code
-
-## VPS Requirements
-
-Your VPS should have:
-- SSH Server configured and running
-- Python 3.8+ installed
-- Git installed
-- Access to trader@5.181.5.168
-
-## GitHub Secrets Configuration
-
-You need to configure the following secrets in your GitHub repository:
-
-1. Go to your GitHub repository
-2. Navigate to **Settings** → **Secrets and variables** → **Actions**
-3. Add the following **Repository secrets**:
-
-| Secret Name | Value | Description |
-|------------|-------|-------------|
-| `VPS_HOST` | `5.181.5.168` | Your VPS IP address |
-| `VPS_USERNAME` | `trader` | SSH username |
-| `SSH_PRIVATE_KEY` | `your_private_key_content` | SSH private key for authentication |
-
-### How to Add Secrets:
-1. Click **"New repository secret"**
-2. Enter the **Name** (e.g., `VPS_HOST`)
-3. Enter the **Secret** value
-4. Click **"Add secret"**
-
-## SSH Key Setup
-
-### 1. Generate SSH Key Pair (on your local machine)
+### 1. VPS Preparation
+Run the setup script on your Windows VPS as Administrator:
 ```cmd
-ssh-keygen -t rsa -b 4096 -C "trader@5.181.5.168"
-```
-- When prompted for file location, press Enter (default: `C:\Users\your_user\.ssh\id_rsa`)
-- When prompted for passphrase, press Enter for no passphrase (recommended for automation)
-
-### 2. Copy Public Key to VPS
-```cmd
-# Copy the public key content
-type C:\Users\your_user\.ssh\id_rsa.pub
+# Copy vps_setup.bat to your VPS and run:
+vps_setup.bat
 ```
 
-Then on your VPS:
-```cmd
-# SSH to your VPS
-ssh trader@5.181.5.168
+### 2. SSH Key Setup
 
-# Create .ssh directory if it doesn't exist
+#### Option A: Using existing SSH connection
+If you're already connecting with username/password, you need to set up SSH key authentication:
+
+1. **On your local machine**, generate an SSH key pair:
+```bash
+ssh-keygen -t rsa -b 4096 -C "github-actions-deploy"
+# Save as: id_rsa_vps_deploy (or any name you prefer)
+# Leave passphrase empty for automation
+```
+
+2. **Copy the public key to your VPS**:
+```bash
+# Copy the content of id_rsa_vps_deploy.pub
+cat ~/.ssh/id_rsa_vps_deploy.pub
+
+# Then on your VPS, create the .ssh directory and authorized_keys file:
 mkdir C:\Users\trader\.ssh
-
-# Add your public key to authorized_keys
-echo your_public_key_content >> C:\Users\trader\.ssh\authorized_keys
+# Add the public key content to: C:\Users\trader\.ssh\authorized_keys
 ```
 
-### 3. Add Private Key to GitHub Secrets
+#### Option B: Generate keys on VPS
+1. **On your VPS**, install OpenSSH if not already installed
+2. Generate keys and configure:
 ```cmd
-# Get your private key content (on local machine)
-type C:\Users\your_user\.ssh\id_rsa
-```
-Copy the entire content (including `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----`) and add it as the `SSH_PRIVATE_KEY` secret in GitHub.
-
-## VPS Initial Setup
-
-Before the first deployment, prepare your VPS:
-
-### 1. Connect to VPS via SSH
-```cmd
-ssh trader@5.181.5.168
+# Run on VPS
+ssh-keygen -t rsa -b 4096
+# Copy the public key to authorized_keys
+copy C:\Users\trader\.ssh\id_rsa.pub C:\Users\trader\.ssh\authorized_keys
 ```
 
-### 2. Install Required Software
-```cmd
-# Install Python (if not already installed)
-# Download from https://www.python.org/downloads/windows/
+### 3. GitHub Repository Secrets Configuration
 
-# Install Git (if not already installed)
-# Download from https://git-scm.com/download/win
+In your GitHub repository, go to **Settings > Secrets and variables > Actions** and add:
 
-# Verify installations
-python --version
-git --version
-pip --version
+#### Required Secrets:
+- **`VPS_SSH_KEY`**: Your private SSH key content (entire content of id_rsa_vps_deploy or id_rsa file)
+
+#### Optional Secrets (if you want to customize):
+- **`VPS_HOST`**: Your VPS IP (default: 5.181.5.168)
+- **`VPS_USER`**: Your VPS username (default: trader)
+- **`DEPLOY_PATH`**: Deployment path on VPS (default: C:/trade_copier)
+
+### 4. Test SSH Connection
+Before deploying, test the SSH connection:
+```bash
+ssh -i ~/.ssh/id_rsa_vps_deploy trader@5.181.5.168
 ```
-
-### 3. Create Deployment Directory
-```cmd
-mkdir C:\Users\trader\binance_trade_copier
-cd C:\Users\trader\binance_trade_copier
-```
-
-### 4. Configure Git (First time only)
-```cmd
-git config --global user.name "Your Name"
-git config --global user.email "your.email@example.com"
-```
-
-## GitHub Repository Setup
-
-### 1. Update the Workflow File
-The GitHub Actions workflow is already configured in `.github/workflows/deploy.yml`. You may need to update the Git repository URL:
-
-```yaml
-# In the workflow file, replace with your actual repository
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-```
-
-### 2. Required Files
-Make sure your repository has:
-- `main.py` - Main application file
-- `requirements.txt` - Python dependencies
-- `config.py` - Configuration file
-- `templates/` - HTML templates directory
-- `.github/workflows/deploy.yml` - Deployment workflow
 
 ## Deployment Process
 
 ### Automatic Deployment
-Every time you push to the `main` branch, the deployment will automatically:
-
-1. **Stop** existing application processes
-2. **Backup** existing data files
-3. **Update** code from GitHub
-4. **Install** Python dependencies
-5. **Start** the application
-6. **Verify** deployment success
+The deployment will trigger automatically when you:
+- Push to the `main` branch
+- Create a pull request that merges to `main`
 
 ### Manual Deployment
 You can also trigger deployment manually:
+1. Go to **Actions** tab in your GitHub repository
+2. Select **Deploy to Windows VPS** workflow
+3. Click **Run workflow**
 
-1. Go to your GitHub repository
-2. Navigate to **Actions** tab
-3. Select **"Deploy Binance Trade Copier to Windows VPS"**
-4. Click **"Run workflow"**
+## Deployment Steps
+
+The GitHub Action performs these steps:
+1. **Backup**: Creates backup of current deployment
+2. **Stop Service**: Stops running application/service
+3. **Deploy Files**: Transfers updated code to VPS
+4. **Install Dependencies**: Updates Python packages
+5. **Start Application**: Restarts the service/application
+6. **Health Check**: Verifies deployment success
 
 ## Monitoring Deployment
 
-### Check Deployment Status
-1. Go to **Actions** tab in your GitHub repository
-2. View the latest workflow run
-3. Check logs for any errors
+### GitHub Actions
+- Check the **Actions** tab for deployment status
+- View detailed logs for each deployment step
 
-### Verify Application
-After deployment, verify the application is running:
-
+### VPS Monitoring
+After deployment, you can check:
 ```cmd
-# SSH to your VPS
-ssh trader@5.181.5.168
+# Check if service is running
+sc query BinanceTradeCopiersvc
 
-# Check if application is running
+# Check running processes
+tasklist | findstr python.exe
+
+# View application logs
+type C:\trade_copier\binance_trade_copier.log
+
+# Test web interface
 curl http://localhost:8000/health
-```
-
-Expected response:
-```json
-{
-  "status": "healthy",
-  "service": "Binance Trade Copier",
-  "timestamp": "2025-06-22T...",
-  "copying_active": false,
-  "active_connections": 0
-}
-```
-
-### View Application Logs
-```cmd
-# On your VPS
-cd C:\Users\trader\binance_trade_copier
-type app.log
 ```
 
 ## Troubleshooting
 
-### Common Issues
+### Common Issues:
 
-#### 1. SSH Connection Failed
-- Verify VPS IP address and credentials
-- Check if SSH service is running on VPS
-- Ensure firewall allows SSH connections
+1. **SSH Connection Failed**
+   - Verify SSH key is correctly added to GitHub secrets
+   - Test SSH connection manually
+   - Check VPS firewall settings
 
-#### 2. Git Clone/Pull Failed
-- Verify repository URL in workflow
-- Check if Git is installed on VPS
-- Ensure VPS has internet access
+2. **Permission Denied**
+   - Ensure user 'trader' has write permissions to deployment directory
+   - Run vps_setup.bat as Administrator
 
-#### 3. Python Dependencies Failed
-- Check if Python is installed and in PATH
-- Verify pip is working: `pip --version`
-- Check internet connectivity for package downloads
+3. **Python/Pip Issues**
+   - Verify Python is installed and in PATH on VPS
+   - Check Python version compatibility (3.8+)
 
-#### 4. Application Start Failed
-- Check application logs: `type app.log`
-- Verify all required files are present
-- Check for port conflicts (default port 8000)
+4. **Service Start Failed**
+   - Check if Windows Service was created properly
+   - View Windows Event Logs for service errors
+   - Try manual start: `python C:\trade_copier\main.py`
 
-### Debug Commands
+5. **Dependencies Installation Failed**
+   - Check internet connection on VPS
+   - Verify pip is working: `python -m pip --version`
+   - Check requirements.txt format
 
+### Rollback Process
+If deployment fails, the previous version is backed up:
 ```cmd
-# Check running Python processes
-tasklist | findstr python
-
-# Check if port 8000 is in use
-netstat -an | findstr :8000
-
-# View recent application logs
-type app.log | more
-
-# Check deployment directory
-dir C:\Users\trader\binance_trade_copier
+# On VPS, restore from backup:
+cd C:\trade_copier
+xcopy backup\*.* . /y
 ```
 
 ## Security Notes
 
-1. **SSH Keys**: Consider using SSH keys instead of passwords for better security
-2. **Secrets**: Never commit secrets to your repository
-3. **Firewall**: Configure Windows Firewall to allow only necessary ports
-4. **Updates**: Keep your VPS and applications updated
+- SSH private key is stored securely in GitHub secrets
+- Never commit SSH keys or passwords to the repository
+- Consider using GitHub environment protection rules for production
+- Regularly rotate SSH keys
+- Monitor deployment logs for security issues
 
-## Application Access
+## Customization
 
-After successful deployment, your application will be available at:
-- **Health Check**: `http://your-vps-ip:8000/health`
-- **Main Application**: `http://your-vps-ip:8000`
+### Deployment Path
+To change the deployment path, update the `DEPLOY_PATH` environment variable in `.github/workflows/deploy.yml`
+
+### Service Configuration
+Modify the `SERVICE_NAME` in the workflow file if you use a different service name
+
+### Health Check Endpoint
+The deployment verifies success using `/health` endpoint. Ensure this endpoint exists in your FastAPI application.
 
 ## Support
 
 If you encounter issues:
 1. Check GitHub Actions logs
-2. Review VPS application logs
-3. Verify all prerequisites are met
-4. Test SSH connection manually
+2. Verify VPS setup using vps_setup.bat
+3. Test SSH connection manually
+4. Check VPS system logs and application logs

@@ -1,107 +1,144 @@
 @echo off
-REM Initial VPS Setup Script for Binance Trade Copier
-REM Run this script on your VPS (trader@5.181.5.168) before first deployment
+REM Binance Trade Copier - VPS Setup Script
+REM Run this script on your Windows VPS to prepare for GitHub Actions deployment
 
 echo ============================================
-echo Binance Trade Copier - VPS Setup Script
+echo  Binance Trade Copier VPS Setup Script
 echo ============================================
 echo.
 
-REM Check if Python is installed
-echo [1/6] Checking Python installation...
+REM Check if running as administrator
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ERROR: This script must be run as Administrator
+    echo Right-click and select "Run as administrator"
+    pause
+    exit /b 1
+)
+
+echo Setting up deployment environment...
+
+REM Create deployment directory
+set DEPLOY_PATH=C:\trade_copier
+if not exist "%DEPLOY_PATH%" (
+    echo Creating deployment directory: %DEPLOY_PATH%
+    mkdir "%DEPLOY_PATH%"
+) else (
+    echo Deployment directory already exists: %DEPLOY_PATH%
+)
+
+REM Check Python installation
+echo.
+echo Checking Python installation...
 python --version >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
+if %errorlevel% neq 0 (
     echo ERROR: Python is not installed or not in PATH
-    echo Please install Python 3.8+ from https://www.python.org/downloads/windows/
+    echo Please install Python 3.8+ and add it to PATH
+    echo Download from: https://www.python.org/downloads/
     pause
     exit /b 1
 ) else (
     python --version
-    echo ✅ Python is installed
+    echo Python is installed correctly
 )
-echo.
 
-REM Check if Git is installed
-echo [2/6] Checking Git installation...
-git --version >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Git is not installed or not in PATH
-    echo Please install Git from https://git-scm.com/download/win
+REM Check pip
+echo.
+echo Checking pip...
+python -m pip --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ERROR: pip is not available
+    echo Please reinstall Python with pip included
     pause
     exit /b 1
 ) else (
-    git --version
-    echo ✅ Git is installed
+    echo pip is available
 )
-echo.
 
-REM Check if pip is working
-echo [3/6] Checking pip installation...
-pip --version >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: pip is not working
-    echo Please ensure Python and pip are properly installed
-    pause
-    exit /b 1
+REM Upgrade pip
+echo.
+echo Upgrading pip...
+python -m pip install --upgrade pip
+
+REM Install curl if not available (for health checks)
+echo.
+echo Checking curl availability...
+curl --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Warning: curl is not available
+    echo Health checks in deployment may not work
+    echo Consider installing curl or using Windows 10/11 which includes it
 ) else (
-    pip --version
-    echo ✅ pip is working
+    echo curl is available
 )
-echo.
 
-REM Create deployment directory
-echo [4/6] Creating deployment directory...
-set DEPLOY_DIR=C:\Users\trader\binance_trade_copier
-if not exist "%DEPLOY_DIR%" (
-    mkdir "%DEPLOY_DIR%"
-    echo ✅ Created directory: %DEPLOY_DIR%
+REM Set permissions for deployment directory
+echo.
+echo Setting permissions for deployment directory...
+icacls "%DEPLOY_PATH%" /grant trader:(OI)(CI)F /t >nul 2>&1
+
+REM Create Windows Service (optional)
+echo.
+echo Do you want to create a Windows Service for the Trade Copier? (y/n)
+set /p create_service="Enter choice: "
+if /i "%create_service%"=="y" (
+    echo.
+    echo Creating Windows Service...
+    
+    REM Create service wrapper script
+    echo @echo off > "%DEPLOY_PATH%\service_wrapper.bat"
+    echo cd /d "%DEPLOY_PATH%" >> "%DEPLOY_PATH%\service_wrapper.bat"
+    echo python main.py >> "%DEPLOY_PATH%\service_wrapper.bat"
+    
+    REM Install service using sc command
+    sc create BinanceTradeCopiersvc binPath= "cmd.exe /c \"%DEPLOY_PATH%\service_wrapper.bat\"" start= auto DisplayName= "Binance Trade Copier Service"
+    
+    if %errorlevel% equ 0 (
+        echo Service created successfully
+        echo Service Name: BinanceTradeCopiersvc
+        echo You can start/stop it using: sc start/stop BinanceTradeCopiersvc
+    ) else (
+        echo Failed to create service
+        echo You can run the application manually or try creating the service later
+    )
 ) else (
-    echo ✅ Directory already exists: %DEPLOY_DIR%
+    echo Skipping service creation
+    echo You can create it later by running this script again
 )
-echo.
 
-REM Create data directories
-echo [5/6] Creating data directories...
-cd /d "%DEPLOY_DIR%"
-if not exist "data" mkdir "data"
-if not exist "templates" mkdir "templates"
-if not exist "logs" mkdir "logs"
-echo ✅ Data directories created
+REM Setup firewall rule for web interface (if needed)
 echo.
-
-REM Configure Git (optional)
-echo [6/6] Git configuration...
-git config --global user.name >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo Git user not configured. Please configure:
-    echo git config --global user.name "Your Name"
-    echo git config --global user.email "your.email@example.com"
+echo Do you want to open firewall port 8000 for the web interface? (y/n)
+set /p open_firewall="Enter choice: "
+if /i "%open_firewall%"=="y" (
+    echo Opening firewall port 8000...
+    netsh advfirewall firewall add rule name="Binance Trade Copier" dir=in action=allow protocol=TCP localport=8000
+    if %errorlevel% equ 0 (
+        echo Firewall rule added successfully
+    ) else (
+        echo Failed to add firewall rule - you may need to do this manually
+    )
 ) else (
-    echo ✅ Git user already configured
-    echo User: 
-    git config --global user.name
-    echo Email: 
-    git config --global user.email
+    echo Skipping firewall configuration
 )
-echo.
 
+echo.
 echo ============================================
-echo Setup completed successfully!
+echo  Setup Complete!
 echo ============================================
 echo.
 echo Next steps:
-echo 1. Configure GitHub secrets in your repository:
-echo    - VPS_HOST: 5.181.5.168
-echo    - VPS_USERNAME: trader
-echo    - VPS_PASSWORD: your_password
+echo 1. Add your SSH public key to the VPS (for GitHub Actions)
+echo 2. Configure GitHub repository secrets:
+echo    - VPS_SSH_KEY: Your private SSH key
+echo 3. Test the deployment by pushing to main branch
 echo.
-echo 2. Update the GitHub repository URL in .github/workflows/deploy.yml
+echo Deployment directory: %DEPLOY_PATH%
+echo Service name: BinanceTradeCopiersvc (if created)
+echo Web interface: http://localhost:8000 (when running)
 echo.
-echo 3. Push your code to the main branch to trigger auto-deployment
-echo.
-echo 4. Monitor deployment at: https://github.com/YOUR_USERNAME/YOUR_REPO/actions
-echo.
-echo Application will be available at: http://localhost:8000
-echo Health check: http://localhost:8000/health
+echo To manually start the application:
+echo   cd %DEPLOY_PATH%
+echo   python main.py
 echo.
 pause
