@@ -18,23 +18,24 @@ jobs:
         port: 22
         script_stop: true
         script: |
-          echo "Starting deployment at $(Get-Date)"
-          cd C:\Users\Administrator\binance_trade_copier
-          echo "Current directory: $(Get-Location)"
-          echo "Git status before pull:"
-          git status
-          echo "Pulling latest changes..."
+          echo Starting deployment at %DATE% %TIME%
+          cd /d C:\Users\Administrator\binance_trade_copier
+          echo Current directory:
+          cd
+          echo Git status before pull:
+          git status --porcelain
+          echo Pulling latest changes...
           git pull origin main
-          echo "Git status after pull:"
-          git status
-          echo "Current commit:"
+          echo Git status after pull:
+          git status --porcelain
+          echo Current commit:
           git log --oneline -1
-          if (Test-Path requirements.txt) {
-            echo "Installing Python dependencies..."
+          if exist requirements.txt (
+            echo Installing Python dependencies...
             python -m pip install -r requirements.txt --upgrade
-          }
-          echo "Stopping any existing Python processes..."
-          Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          echo "Starting application in background..."
-          Start-Process -FilePath "python" -ArgumentList "main.py" -WorkingDirectory "C:\Users\Administrator\binance_trade_copier" -WindowStyle Hidden
-          echo "Deployment completed at $(Get-Date)"
+          )
+          echo Stopping any existing Python processes...
+          taskkill /F /IM python.exe 2>NUL
+          echo Starting application in background...
+          start "" python main.py
+          echo Deployment completed at %DATE% %TIME%
