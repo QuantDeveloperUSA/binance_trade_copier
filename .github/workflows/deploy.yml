@@ -19,7 +19,7 @@ jobs:
         timeout: 120s
         command_timeout: 600s
         script_stop: true
-        debug: false
+        debug: true
         script: |
           cd /d "C:\Users\trader\binance_trade_copier"
           echo "=== DEPLOYMENT START ==="
