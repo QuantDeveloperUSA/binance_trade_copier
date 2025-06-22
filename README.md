@@ -1,4 +1,4 @@
-# Binance Copy Trading System
+# Binance Trade Copier
 
 A simple Binance-to-Binance copy trading system that copies futures trades from master accounts to slave accounts.
 

@@ -24,7 +24,7 @@ logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
-app = FastAPI(title="Binance Copy Trading System")
+app = FastAPI(title="Binance Trade Copier")
 templates = Jinja2Templates(directory="templates")
 
 # Global variables
@@ -513,7 +513,7 @@ async def connect_slave(slave_id: str, api_key: str, api_secret: str):
 async def startup_event():
     """Initialize system on startup"""
     ensure_data_files()
-    logger.info("Binance Copy Trading System started")
+    logger.info("Binance Trade Copier started")
 
 @app.on_event("shutdown")
 async def shutdown_event():

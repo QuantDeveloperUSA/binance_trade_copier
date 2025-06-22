@@ -1,6 +1,6 @@
 @echo off
-title Binance Copy Trading System
-echo Starting Binance Copy Trading System...
+title Binance Trade Copier
+echo Starting Binance Trade Copier...
 echo.
 echo Make sure you have installed the requirements:
 echo   pip install -r requirements.txt
