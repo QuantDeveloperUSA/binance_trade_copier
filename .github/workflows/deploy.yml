@@ -10,31 +10,40 @@ jobs:
     
     steps:
     - name: Deploy to Windows VPS
-      uses: appleboy/ssh-action@v0.1.5
+      uses: appleboy/ssh-action@v0.1.7
       with:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
         port: 22
-        timeout: 60s
-        command_timeout: 300s
+        timeout: 120s
+        command_timeout: 600s
         script_stop: true
+        debug: true
         script: |
-          echo "=== DEPLOYMENT START ==="
-          echo "Current time: %DATE% %TIME%"
-          cd /d "C:\Users\Administrator\binance_trade_copier"
-          echo "Current directory: %CD%"
-          echo "=== GIT PULL ==="
-          git pull origin main
-          echo "=== CURRENT COMMIT ==="
+          echo "=== STARTING DEPLOYMENT ==="
+          echo "Host: %COMPUTERNAME%"
+          echo "User: %USERNAME%"
+          echo "Time: %DATE% %TIME%"
+          cd /d "C:\Users\Administrator\binance_trade_copier" || exit /b 1
+          echo "=== CURRENT DIRECTORY ==="
+          cd
+          echo "=== GIT STATUS BEFORE ==="
+          git status --porcelain
+          git log --oneline -1
+          echo "=== PULLING CHANGES ==="
+          git pull origin main || exit /b 1
+          echo "=== GIT STATUS AFTER ==="
+          git status --porcelain
           git log --oneline -1
           echo "=== STOPPING PYTHON ==="
-          taskkill /F /IM python.exe 2>nul || echo "No Python process to stop"
-          echo "=== WAITING ==="
+          taskkill /F /IM python.exe 2>nul
+          echo "=== WAITING FOR STOP ==="
           timeout /t 5 /nobreak
           echo "=== STARTING PYTHON ==="
           start /B python main.py
-          echo "=== VERIFYING ==="
+          echo "=== WAITING FOR START ==="
           timeout /t 3 /nobreak
-          tasklist | findstr python || echo "Python not found in process list"
-          echo "=== DEPLOYMENT END ==="
+          echo "=== VERIFYING PROCESS ==="
+          tasklist | findstr python
+          echo "=== DEPLOYMENT COMPLETE ==="
