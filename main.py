@@ -218,164 +218,6 @@ async def get_account_history(client: AsyncClient, account_type: str) -> Dict:
     
     return history
 
-# File operations
-def ensure_data_files():
-    """Ensure all required data files exist"""
-    DATA_DIR.mkdir(exist_ok=True)
-    
-    if not ACCOUNTS_FILE.exists():
-        with open(ACCOUNTS_FILE, 'w') as f:
-            json.dump({"accounts": []}, f, indent=2)
-    
-    if not TRADES_FILE.exists():
-        with open(TRADES_FILE, 'w') as f:
-            json.dump({"trades": []}, f, indent=2)
-    
-    if not SYSTEM_FILE.exists():
-        with open(SYSTEM_FILE, 'w') as f:
-            json.dump({"copying_active": False, "started_at": None}, f, indent=2)
-
-def load_accounts() -> List[Dict]:
-    """Load accounts from JSON file"""
-    with open(ACCOUNTS_FILE, 'r') as f:
-        data = json.load(f)
-    return data.get('accounts', [])
-
-def save_accounts(accounts: List[Dict]):
-    """Save accounts to JSON file"""
-    with open(ACCOUNTS_FILE, 'w') as f:
-        json.dump({"accounts": accounts}, f, indent=2)
-
-def save_trade(trade_data: Dict):
-    """Save trade record to JSON file"""
-    with open(TRADES_FILE, 'r+') as f:
-        trades = json.load(f)
-        trades['trades'].append(trade_data)
-        # Keep only last 1000 trades
-        trades['trades'] = trades['trades'][-1000:]
-        f.seek(0)
-        f.truncate()
-        json.dump(trades, f, indent=2)
-
-def update_system_state(copying: bool):
-    """Update system state"""
-    with open(SYSTEM_FILE, 'w') as f:
-        json.dump({
-            "copying_active": copying,
-            "started_at": datetime.now().isoformat() if copying else None
-        }, f, indent=2)
-
-# Trading functions
-async def get_account_balance(client: AsyncClient) -> float:
-    """Get futures account balance"""
-    try:
-        account_info = await client.futures_account()
-        # Use totalWalletBalance for the total balance including unrealized PnL
-        balance = float(account_info.get('totalWalletBalance', 0))
-        # If totalWalletBalance is 0, try availableBalance
-        if balance == 0:
-            balance = float(account_info.get('availableBalance', 0))
-        return balance
-    except BinanceAPIException as e:
-        if "restricted location" in str(e):
-            raise Exception("Binance access restricted in your location")
-        elif "Invalid API" in str(e):
-            raise Exception("Invalid API key or secret")
-        else:
-            raise Exception(f"API Error: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error getting account balance: {e}")
-        raise
-
-async def get_account_history(client: AsyncClient, account_type: str) -> Dict:
-    """Get comprehensive account history"""
-    history = {
-        "balance_history": [],
-        "trade_history": [],
-        "deposit_history": [],
-        "withdraw_history": [],
-        "positions": []
-    }
-    
-    try:
-        # Get current account info
-        account_info = await client.futures_account()
-        
-        # Get balance info
-        history["current_balance"] = {
-            "total": float(account_info.get('totalWalletBalance', 0)),
-            "available": float(account_info.get('availableBalance', 0)),
-            "margin": float(account_info.get('totalMarginBalance', 0)),
-            "unrealized_pnl": float(account_info.get('totalUnrealizedProfit', 0))
-        }
-        
-        # Get open positions
-        positions = account_info.get('positions', [])
-        for pos in positions:
-            if float(pos.get('positionAmt', 0)) != 0:
-                history["positions"].append({
-                    "symbol": pos.get('symbol'),
-                    "amount": float(pos.get('positionAmt', 0)),
-                    "entry_price": float(pos.get('entryPrice', 0)),
-                    "mark_price": float(pos.get('markPrice', 0)),
-                    "pnl": float(pos.get('unrealizedProfit', 0)),
-                    "side": "LONG" if float(pos.get('positionAmt', 0)) > 0 else "SHORT"
-                })
-        
-        # Get recent trades (last 7 days)
-        try:
-            trades = await client.futures_account_trades(limit=100)
-            for trade in trades:
-                history["trade_history"].append({
-                    "time": datetime.fromtimestamp(trade['time'] / 1000).isoformat(),
-                    "symbol": trade['symbol'],
-                    "side": trade['side'],
-                    "price": float(trade['price']),
-                    "qty": float(trade['qty']),
-                    "commission": float(trade['commission']),
-                    "realized_pnl": float(trade.get('realizedPnl', 0))
-                })
-        except Exception as e:
-            logger.error(f"Error fetching trade history: {e}")
-        
-        # Get deposit/withdraw history (spot wallet)
-        try:
-            # Check spot deposit history
-            deposits = await client.get_deposit_history()
-            if deposits:
-                for dep in deposits:
-                    history["deposit_history"].append({
-                        "time": datetime.fromtimestamp(dep['insertTime'] / 1000).isoformat(),
-                        "coin": dep['coin'],
-                        "amount": float(dep['amount']),
-                        "status": dep['status']
-                    })
-        except Exception as e:
-            logger.error(f"Error fetching deposit history: {e}")
-        
-        # Get income history (funding fees, commissions, etc.)
-        try:
-            income = await client.futures_income_history(limit=100)
-            for inc in income:
-                if inc['incomeType'] == 'FUNDING_FEE':
-                    history["trade_history"].append({
-                        "time": datetime.fromtimestamp(inc['time'] / 1000).isoformat(),
-                        "symbol": inc['symbol'],
-                        "side": "FUNDING",
-                        "price": 0,
-                        "qty": 0,
-                        "commission": float(inc['income']),
-                        "realized_pnl": 0
-                    })
-        except Exception as e:
-            logger.error(f"Error fetching income history: {e}")
-            
-    except Exception as e:
-        logger.error(f"Error getting account history: {e}")
-        raise
-    
-    return history
-
 async def copy_to_slaves(trade_data: Dict, master_id: str):
     """Copy master trade to all active slaves"""
     if trade_data['e'] != 'ORDER_TRADE_UPDATE':
@@ -755,5 +597,21 @@ async def get_account_balance_endpoint(account_id: str):
         logger.error(f"Error getting balance for {account_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "service": "Binance Trade Copier",
+        "version": "1.0.0"
+    }
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    try:
+        logger.info("Starting Binance Trade Copier application...")
+        logger.info(f"Server will be available at http://0.0.0.0:8000")
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+    except Exception as e:
+        logger.error(f"Failed to start application: {e}")
+        raise
