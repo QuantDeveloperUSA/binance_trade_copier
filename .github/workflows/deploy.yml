@@ -16,26 +16,4 @@ jobs:
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
         port: 22
-        script_stop: true
-        script: |
-          echo Starting deployment at %DATE% %TIME%
-          cd /d C:\Users\Administrator\binance_trade_copier
-          echo Current directory:
-          cd
-          echo Git status before pull:
-          git status --porcelain
-          echo Pulling latest changes...
-          git pull origin main
-          echo Git status after pull:
-          git status --porcelain
-          echo Current commit:
-          git log --oneline -1
-          if exist requirements.txt (
-            echo Installing Python dependencies...
-            python -m pip install -r requirements.txt --upgrade
-          )
-          echo Stopping any existing Python processes...
-          taskkill /F /IM python.exe 2>NUL
-          echo Starting application in background...
-          start "" python main.py
-          echo Deployment completed at %DATE% %TIME%
+        script: C:\Users\Administrator\binance_trade_copier\deploy_script.bat
