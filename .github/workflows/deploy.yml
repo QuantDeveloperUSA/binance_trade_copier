@@ -20,4 +20,4 @@ jobs:
         command_timeout: 600s
         script_stop: true
         debug: false
-        script: cd /d "C:\Users\Administrator\binance_trade_copier" && echo "=== DEPLOYMENT START ===" && git pull origin main && echo "=== GIT PULLED ===" && taskkill /F /IM python.exe 2>nul && echo "=== PYTHON STOPPED ===" && timeout /t 3 /nobreak && start /B python main.py && echo "=== PYTHON STARTED ===" && timeout /t 2 /nobreak && tasklist | findstr python && echo "=== DEPLOYMENT COMPLETE ==="
+        script: cd /d "C:\Users\Administrator\binance_trade_copier" && echo "=== DEPLOYMENT START ===" && git pull origin main && echo "=== GIT PULLED ===" && taskkill /F /IM python.exe 2>nul && echo "=== PYTHON STOPPED ===" && ping 127.0.0.1 -n 4 > nul && start /B python main.py && echo "=== PYTHON STARTED ===" && ping 127.0.0.1 -n 3 > nul && echo "=== DEPLOYMENT COMPLETE ==="
