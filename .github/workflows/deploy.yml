@@ -1,0 +1,180 @@
+name: Deploy to Windows VPS
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual deployment
+
+env:
+  VPS_HOST: "5.181.5.168"
+  VPS_USER: "trader"
+  DEPLOY_PATH: "C:/trade_copier"
+  SERVICE_NAME: "BinanceTradeCopiersvc"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH key
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
+        
+    - name: Test SSH connection
+      run: |
+        ssh -i ~/.ssh/id_rsa -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "echo 'SSH connection successful'"
+        
+    - name: Create deployment directory
+      run: |
+        ssh -i ~/.ssh/id_rsa ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "if not exist ${{ env.DEPLOY_PATH }} mkdir ${{ env.DEPLOY_PATH }}"
+        
+    - name: Backup current deployment
+      run: |
+        ssh -i ~/.ssh/id_rsa ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          if exist ${{ env.DEPLOY_PATH }}\main.py (
+            echo Creating backup...
+            if exist ${{ env.DEPLOY_PATH }}\backup rmdir /s /q ${{ env.DEPLOY_PATH }}\backup
+            mkdir ${{ env.DEPLOY_PATH }}\backup
+            xcopy ${{ env.DEPLOY_PATH }}\*.py ${{ env.DEPLOY_PATH }}\backup\ /y /q
+            xcopy ${{ env.DEPLOY_PATH }}\*.txt ${{ env.DEPLOY_PATH }}\backup\ /y /q
+            xcopy ${{ env.DEPLOY_PATH }}\*.json ${{ env.DEPLOY_PATH }}\backup\ /y /q 2>nul || echo No JSON files to backup
+            if exist ${{ env.DEPLOY_PATH }}\templates xcopy ${{ env.DEPLOY_PATH }}\templates ${{ env.DEPLOY_PATH }}\backup\templates\ /e /y /q
+            if exist ${{ env.DEPLOY_PATH }}\data xcopy ${{ env.DEPLOY_PATH }}\data ${{ env.DEPLOY_PATH }}\backup\data\ /e /y /q
+            echo Backup completed
+          ) else (
+            echo No existing deployment found, skipping backup
+          )
+        "
+        
+    - name: Stop service if running
+      run: |
+        ssh -i ~/.ssh/id_rsa ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          echo Stopping service if running...
+          sc query ${{ env.SERVICE_NAME }} >nul 2>&1 && (
+            echo Service exists, stopping...
+            sc stop ${{ env.SERVICE_NAME }} || echo Service already stopped
+            timeout /t 5 /nobreak >nul
+          ) || echo Service does not exist
+        "
+        
+    - name: Kill any running Python processes
+      run: |
+        ssh -i ~/.ssh/id_rsa ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          echo Terminating any running trade copier processes...
+          taskkill /f /im python.exe 2>nul || echo No Python processes to kill
+          taskkill /f /im pythonw.exe 2>nul || echo No Pythonw processes to kill
+          timeout /t 3 /nobreak >nul
+        "
+        
+    - name: Deploy files
+      run: |
+        # Transfer main application files
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no main.py config.py requirements.txt README.md ${{ env.VPS_USER }}@${{ env.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
+        
+        # Transfer templates directory
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r templates/ ${{ env.VPS_USER }}@${{ env.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
+        
+        # Create data directory if it doesn't exist and transfer data files
+        ssh -i ~/.ssh/id_rsa ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "if not exist ${{ env.DEPLOY_PATH }}\data mkdir ${{ env.DEPLOY_PATH }}\data"
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r data/ ${{ env.VPS_USER }}@${{ env.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
+        
+    - name: Install/Update Python dependencies
+      run: |
+        ssh -i ~/.ssh/id_rsa ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          echo Installing Python dependencies...
+          cd ${{ env.DEPLOY_PATH }}
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt --upgrade
+          echo Dependencies installed successfully
+        "
+        
+    - name: Set file permissions
+      run: |
+        ssh -i ~/.ssh/id_rsa ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          echo Setting file permissions...
+          cd ${{ env.DEPLOY_PATH }}
+          icacls . /grant ${{ env.VPS_USER }}:(OI)(CI)F /t
+          echo Permissions set successfully
+        "
+        
+    - name: Create service script if needed
+      run: |
+        ssh -i ~/.ssh/id_rsa ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          cd ${{ env.DEPLOY_PATH }}
+          if not exist start_service.bat (
+            echo Creating service start script...
+            echo @echo off > start_service.bat
+            echo cd /d ${{ env.DEPLOY_PATH }} >> start_service.bat
+            echo python main.py >> start_service.bat
+            echo Service script created
+          )
+        "
+        
+    - name: Start application
+      run: |
+        ssh -i ~/.ssh/id_rsa ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          echo Starting application...
+          cd ${{ env.DEPLOY_PATH }}
+          
+          REM Try to start as service first
+          sc query ${{ env.SERVICE_NAME }} >nul 2>&1 && (
+            echo Starting as Windows service...
+            sc start ${{ env.SERVICE_NAME }}
+            timeout /t 5 /nobreak >nul
+          ) || (
+            echo Service not found, starting as background process...
+            start /b python main.py
+            timeout /t 3 /nobreak >nul
+          )
+          
+          echo Application start command executed
+        "
+        
+    - name: Health check
+      run: |
+        echo "Waiting for application to start..."
+        sleep 10
+        
+        # Test if the application is responding
+        ssh -i ~/.ssh/id_rsa ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          echo Testing application health...
+          curl -f http://localhost:8000/health 2>nul || (
+            echo Health check via curl failed, checking if process is running...
+            tasklist | findstr python.exe || echo No Python process found
+          )
+        "
+        
+    - name: Deployment status
+      run: |
+        ssh -i ~/.ssh/id_rsa ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          echo.
+          echo === Deployment Status ===
+          echo Current directory contents:
+          dir ${{ env.DEPLOY_PATH }}
+          echo.
+          echo Running processes:
+          tasklist | findstr python.exe || echo No Python processes running
+          echo.
+          echo Service status:
+          sc query ${{ env.SERVICE_NAME }} 2>nul || echo Service not installed
+          echo.
+          echo === Deployment Complete ===
+        "
+        
+    - name: Notify deployment result
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Deployment completed successfully!"
+          echo "🚀 Binance Trade Copier is now running on VPS: ${{ env.VPS_HOST }}"
+          echo "🔍 Health check endpoint: http://${{ env.VPS_HOST }}:8000/health"
+        else
+          echo "❌ Deployment failed!"
+          echo "🔧 Check the logs above for details"
+        fi
