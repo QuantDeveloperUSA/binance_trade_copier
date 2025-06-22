@@ -9,6 +9,12 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    - name: Debug GitHub Secrets
+      run: |
+        echo "Host: ${{ secrets.VPS_HOST }}"
+        echo "Username: ${{ secrets.VPS_USERNAME }}"
+        echo "Password length: $(echo '${{ secrets.VPS_PASSWORD }}' | wc -c)"
+        
     - name: Deploy to Windows VPS
       uses: appleboy/ssh-action@v1.0.3
       with:
