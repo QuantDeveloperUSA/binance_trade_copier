@@ -32,7 +32,7 @@ jobs:
         
     - name: Create deployment directory
       run: |
-        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "if not exist ${{ env.DEPLOY_PATH }} mkdir ${{ env.DEPLOY_PATH }}"
+        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "if not exist C:\\trade_copier mkdir C:\\trade_copier"
         
     - name: Backup current deployment
       run: |
@@ -69,7 +69,8 @@ jobs:
           echo Terminating any running trade copier processes...
           taskkill /f /im python.exe 2>nul || echo No Python processes to kill
           taskkill /f /im pythonw.exe 2>nul || echo No Pythonw processes to kill
-          timeout /t 3 /nobreak >nul        "
+          timeout /t 3 /nobreak >nul
+        "
         
     - name: Deploy files
       run: |
@@ -78,9 +79,8 @@ jobs:
         
         # Transfer templates directory
         sshpass -p '${{ secrets.VPS_PASSWORD }}' scp -o StrictHostKeyChecking=no -r templates/ ${{ env.VPS_USER }}@${{ env.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
-        
-        # Create data directory if it doesn't exist and transfer data files
-        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "if not exist ${{ env.DEPLOY_PATH }}\\data mkdir ${{ env.DEPLOY_PATH }}\\data"
+          # Create data directory if it doesn't exist and transfer data files
+        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "if not exist C:\\trade_copier\\data mkdir C:\\trade_copier\\data"
         sshpass -p '${{ secrets.VPS_PASSWORD }}' scp -o StrictHostKeyChecking=no -r data/ ${{ env.VPS_USER }}@${{ env.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
         
     - name: Install/Update Python dependencies
