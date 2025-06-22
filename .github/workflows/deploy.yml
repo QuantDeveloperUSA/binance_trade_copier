@@ -1,54 +1,104 @@
-name: Deploy to Windows VPS
+name: Deploy Binance Trade Copier to Windows VPS
 
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  DEPLOYMENT_PATH: "C:\\Users\\trader\\binance_trade_copier"
+  APP_PORT: 8000
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Debug GitHub Secrets
-      run: |
-        echo "Host: ${{ secrets.VPS_HOST }}"
-        echo "Username: ${{ secrets.VPS_USERNAME }}"
-        echo "Password length: $(echo '${{ secrets.VPS_PASSWORD }}' | wc -c)"
-        
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
     - name: Deploy to Windows VPS
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USERNAME }}
-        password: ${{ secrets.VPS_PASSWORD }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
         port: 22
-        timeout: 120s
-        command_timeout: 600s
+        timeout: 300s
+        command_timeout: 900s
         script_stop: true
-        debug: true
-        use_insecure_cipher: true
         script: |
-          cd /d "C:\Users\trader\binance_trade_copier"
-          echo "=== DEPLOYMENT START ==="
+          echo "=== BINANCE TRADE COPIER DEPLOYMENT START ==="
+          echo "Timestamp: %date% %time%"
+          
+          echo "=== CREATING DEPLOYMENT DIRECTORY ==="
+          if not exist "${{ env.DEPLOYMENT_PATH }}" mkdir "${{ env.DEPLOYMENT_PATH }}"
+          cd /d "${{ env.DEPLOYMENT_PATH }}"
+          
+          echo "=== STOPPING EXISTING APPLICATION ==="
+          taskkill /F /IM python.exe /FI "WINDOWTITLE eq*main.py*" 2>nul || echo "No existing Python processes found"
+          taskkill /F /IM uvicorn.exe 2>nul || echo "No existing Uvicorn processes found"
+          timeout /t 5 /nobreak >nul
+          
+          echo "=== BACKING UP EXISTING DATA ==="
+          if exist "data" (
+            if not exist "data_backup" mkdir "data_backup"
+            copy "data\*.json" "data_backup\" 2>nul || echo "No data files to backup"
+          )
+          
+          echo "=== INITIALIZING/UPDATING GIT REPOSITORY ==="
+          if exist ".git" (
+            echo "Repository exists, updating..."
+            git fetch origin
+            git clean -fd
+            git reset --hard origin/main
+          ) else (
+            echo "Initializing new repository..."
+            git init
+            git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+            git fetch origin
+            git checkout -b main
+            git reset --hard origin/main
+          )
+          
+          echo "=== RESTORING DATA FILES ==="
+          if exist "data_backup" (
+            if not exist "data" mkdir "data"
+            copy "data_backup\*.json" "data\" 2>nul || echo "No backup data to restore"
+          )
+          
+          echo "=== INSTALLING PYTHON DEPENDENCIES ==="
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
           echo "=== CLEANING PYTHON CACHE ==="
-          for /d /r . %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d"
+          for /d /r . %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d" 2>nul
           del /s /q *.pyc 2>nul
-          echo "=== RESETTING GIT STATE ==="
-          git clean -fd
-          git reset --hard HEAD
-          echo "=== PULLING LATEST CHANGES ==="
-          git pull origin main
-          echo "=== GIT PULLED ==="
-          echo "=== STOPPING EXISTING PYTHON PROCESSES ==="
-          taskkill /F /IM python.exe 2>nul
-          echo "=== PYTHON STOPPED ==="
-          ping 127.0.0.1 -n 4 > nul
-          echo "=== INSTALLING/UPDATING REQUIREMENTS ==="
-          pip install -r requirements.txt --quiet
-          echo "=== STARTING PYTHON APPLICATION ==="
-          start /B python main.py > deployment.log 2>&1
-          echo "=== PYTHON STARTED ==="
-          ping 127.0.0.1 -n 6 > nul
-          echo "=== VERIFYING APPLICATION ==="
-          curl -s -m 10 http://localhost:8000 | findstr "Trade Copier" && echo "✅ Application verified" || echo "❌ Application verification failed"
-          echo "=== DEPLOYMENT COMPLETE ==="
+          
+          echo "=== CREATING DATA DIRECTORIES ==="
+          if not exist "data" mkdir "data"
+          if not exist "templates" mkdir "templates"
+          
+          echo "=== STARTING APPLICATION ==="
+          start /B cmd /c "python main.py > app.log 2>&1"
+          echo "Application started in background"
+          
+          echo "=== WAITING FOR APPLICATION STARTUP ==="
+          timeout /t 10 /nobreak >nul
+          
+          echo "=== VERIFYING DEPLOYMENT ==="
+          curl -s -m 15 http://localhost:${{ env.APP_PORT }}/health 2>nul && (
+            echo "✅ Health check passed - Application is running"
+          ) || (
+            echo "❌ Health check failed - Checking if main application responds"
+            curl -s -m 15 http://localhost:${{ env.APP_PORT }} 2>nul && (
+              echo "✅ Main application responds"
+            ) || (
+              echo "❌ Application verification failed"
+              echo "Last 10 lines of application log:"
+              tail -n 10 app.log 2>nul || echo "No log file found"
+            )
+          )
+          
+          echo "=== DEPLOYMENT COMPLETED ==="
+          echo "Timestamp: %date% %time%"

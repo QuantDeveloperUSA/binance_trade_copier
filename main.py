@@ -34,6 +34,18 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Binance Trade Copier")
 templates = Jinja2Templates(directory="templates")
 
+# Health check endpoint for deployment verification
+@app.get("/health")
+async def health_check() -> dict:
+    """Health check endpoint for deployment verification"""
+    return {
+        "status": "healthy",
+        "service": "Binance Trade Copier",
+        "timestamp": datetime.now().isoformat(),
+        "copying_active": copying_active,
+        "active_connections": len(active_connections)
+    }
+
 # Global variables
 active_connections: Dict[str, AsyncClient] = {}
 socket_managers: Dict[str, BinanceSocketManager] = {}
@@ -597,15 +609,6 @@ async def get_account_balance_endpoint(account_id: str):
         logger.error(f"Error getting balance for {account_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for monitoring"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "service": "Binance Trade Copier",
-        "version": "1.0.0"
-    }
 
 if __name__ == "__main__":
     try:
