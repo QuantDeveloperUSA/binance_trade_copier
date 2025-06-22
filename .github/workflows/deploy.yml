@@ -26,6 +26,14 @@ jobs:
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
         
+        # Debug: Check SSH key setup
+        echo "SSH key file size:"
+        ls -la ~/.ssh/id_rsa
+        echo "SSH key first line:"
+        head -1 ~/.ssh/id_rsa
+        echo "SSH key last line:"
+        tail -1 ~/.ssh/id_rsa
+        
     - name: Test SSH connection
       run: |
         ssh -i ~/.ssh/id_rsa -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "echo 'SSH connection successful'"
