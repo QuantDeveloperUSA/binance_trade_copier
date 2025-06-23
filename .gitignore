@@ -48,6 +48,15 @@ htmlcov/
 
 # SSH Keys and Security (NEVER commit private keys!)
 **/ssh_config/vps_key
+github_actions_key
+github_actions_key.pub
+*_key
+*_key.pub
+*.pem
+*.ppk
+id_rsa*
+id_ecdsa*
+id_ed25519*
 **/ssh_config/*_key
 **/ssh_config/*.pem
 **/ssh_config/*.key
