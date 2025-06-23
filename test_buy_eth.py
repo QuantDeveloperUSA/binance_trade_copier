@@ -51,6 +51,11 @@ async def test_buy_eth():
         balance = float(account_info.get('totalWalletBalance', 0))
         logger.info(f"Current balance: ${balance:.2f}")
         
+        # Check position mode
+        position_mode = await client.futures_get_position_mode()
+        dual_side_position = position_mode.get('dualSidePosition', False)
+        logger.info(f"Position mode: {'Hedge Mode' if dual_side_position else 'One-way Mode'}")
+        
         # Define order parameters
         symbol = 'ETHUSDT'
         min_notional = 20.0  # Binance minimum order value in USDT
@@ -60,28 +65,47 @@ async def test_buy_eth():
         current_price = float(ticker['price'])
         logger.info(f"Current ETH price: ${current_price:.2f}")
         
-        # Calculate minimum quantity needed
-        min_quantity = min_notional / current_price
-        quantity = round(min_quantity * 1.1, 3)  # Add 10% buffer and round to 3 decimals
-        order_value = current_price * quantity
+        # Ask user for order size
+        print(f"\nMinimum order value: ${min_notional}")
+        order_value_input = input(f"Enter order value in USDT (minimum ${min_notional}): $")
         
-        logger.info(f"Minimum order value: ${min_notional}")
-        logger.info(f"Calculated quantity: {quantity} ETH")
-        logger.info(f"Order value: ${order_value:.2f}")
+        try:
+            order_value = float(order_value_input)
+            if order_value < min_notional:
+                logger.error(f"Order value must be at least ${min_notional}")
+                return
+        except ValueError:
+            logger.error("Invalid order value entered")
+            return
+        
+        # Calculate quantity
+        quantity = round(order_value / current_price, 3)
+        actual_value = current_price * quantity
+        
+        logger.info(f"Order quantity: {quantity} ETH")
+        logger.info(f"Actual order value: ${actual_value:.2f}")
         
         # Check if we have enough balance
-        if balance < order_value * 0.1:  # Need at least 10% for margin
-            logger.error(f"Insufficient balance. Need at least ${order_value * 0.1:.2f} for margin")
+        if balance < actual_value * 0.1:  # Need at least 10% for margin
+            logger.error(f"Insufficient balance. Need at least ${actual_value * 0.1:.2f} for margin")
             return
         
         # Place market buy order
         logger.info(f"Placing market buy order for {quantity} ETH...")
-        order = await client.futures_create_order(
-            symbol=symbol,
-            side='BUY',
-            type='MARKET',
-            quantity=quantity
-        )
+        
+        # Prepare order parameters
+        order_params = {
+            'symbol': symbol,
+            'side': 'BUY',
+            'type': 'MARKET',
+            'quantity': quantity
+        }
+        
+        # Add position side if in hedge mode
+        if dual_side_position:
+            order_params['positionSide'] = 'LONG'
+        
+        order = await client.futures_create_order(**order_params)
         
         # Log order details
         logger.info("Order placed successfully!")
@@ -96,6 +120,8 @@ async def test_buy_eth():
         
         # Get updated position
         await asyncio.sleep(1)  # Wait a moment for position to update
+        # Fetch fresh account info for updated positions
+        account_info = await client.futures_account()
         positions = account_info.get('positions', [])
         eth_position = next((p for p in positions if p['symbol'] == symbol), None)
         
@@ -114,6 +140,8 @@ async def test_buy_eth():
             logger.error("⚠️  Invalid API key or secret")
         elif "Insufficient balance" in str(e):
             logger.error("⚠️  Insufficient balance for this trade")
+        elif "position side does not match" in str(e):
+            logger.error("⚠️  Position mode mismatch. Check your account's position mode settings")
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         import traceback
@@ -126,10 +154,10 @@ async def test_buy_eth():
 async def main():
     """Main function"""
     logger.info("=" * 50)
-    logger.info("BINANCE ETH BUY TEST")
+    logger.info("BINANCE FUTURES ETH BUY TEST")
     logger.info("=" * 50)
     
-    confirm = input("\n⚠️  This will place a REAL order to buy ETH (minimum $20 value). Continue? (yes/no): ")
+    confirm = input("\n⚠️  This will place a REAL futures order to buy ETH. Continue? (yes/no): ")
     if confirm.lower() != 'yes':
         logger.info("Test cancelled by user")
         return
