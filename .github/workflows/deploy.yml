@@ -38,8 +38,7 @@ jobs:
         sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
           echo Stopping all Python processes...
           taskkill /f /im python.exe 2>nul || echo No Python processes to kill
-          taskkill /f /im pythonw.exe 2>nul || echo No Pythonw processes to kill
-          timeout /t 3 /nobreak >nul
+          taskkill /f /im pythonw.exe 2>nul || echo No Pythonw processes to kill          timeout /t 3 /nobreak >nul
         "
         
     - name: Deploy all files
@@ -52,31 +51,61 @@ jobs:
         sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
           cd ${{ env.DEPLOY_PATH }}
           echo Current directory: %CD%
-          echo Checking Python installation...
-          python --version || echo Python not found in PATH
-          where python || echo Python executable not located
           echo.
-          echo Checking main.py...
-          if exist main.py (echo main.py found) else (echo main.py NOT found)
+          echo === PYTHON DIAGNOSTICS ===
+          python --version 2>&1 || echo Python command failed
+          where python 2>&1 || echo Python not in PATH
           echo.
+          echo === FILE CHECK ===
+          if exist main.py (
+            echo ✅ main.py found
+          ) else (
+            echo ❌ main.py NOT found
+            exit /b 1
+          )
+          if exist requirements.txt (
+            echo ✅ requirements.txt found
+          ) else (
+            echo ❌ requirements.txt NOT found
+            exit /b 1
+          )
+          echo.
+          echo === DATA DIRECTORY SETUP ===
+          if not exist data mkdir data
+          if not exist data\\accounts.json echo {} > data\\accounts.json
+          if not exist data\\trades.json echo [] > data\\trades.json  
+          if not exist data\\system.json echo {\"copying_active\": false} > data\\system.json
+          echo Data files created/verified
+          echo.
+          echo === DEPENDENCIES ===
           echo Installing Python dependencies...
-          python -m pip install -r requirements.txt --upgrade 2>&1
+          python -m pip install -r requirements.txt --upgrade 2>&1 || (
+            echo ❌ Pip install failed
+            exit /b 1
+          )
+          echo ✅ Dependencies installed
           echo.
-          echo Testing main.py syntax...
-          python -m py_compile main.py || echo Syntax error in main.py
+          echo === SYNTAX CHECK ===
+          python -c \"import ast; ast.parse(open('main.py').read()); print('✅ Syntax OK')\" 2>&1 || (
+            echo ❌ Syntax error in main.py
+            exit /b 1
+          )
           echo.
-          echo Starting server with full output...
-          python main.py > server_output.log 2>&1 &
-          echo Server start command executed
+          echo === IMPORT TEST ===
+          python -c \"import config, fastapi, uvicorn; print('✅ Core imports OK')\" 2>&1 || (
+            echo ❌ Import test failed  
+            exit /b 1
+          )
+          echo.
+          echo === STARTING SERVER ===
+          echo Starting FastAPI server in background...
+          start /b cmd /c \"python main.py > server_output.log 2>&1\"
+          echo Waiting 5 seconds for server startup...
           timeout /t 5 /nobreak >nul
           echo.
-          echo Checking if server is running...
-          tasklist | findstr python.exe || echo No Python processes found
-          echo.
-          echo Server output log:
-          type server_output.log 2>nul || echo No server output log found
-        "
-        
+          echo === SERVER STATUS CHECK ===
+          tasklist | findstr python.exe && echo ✅ Python process running || echo ❌ No Python process found
+        "        
     - name: Verify deployment and debug server
       run: |
         echo "Checking deployment status and server health..."
@@ -87,7 +116,7 @@ jobs:
           dir /b
           echo.
           echo === PYTHON PROCESSES ===
-          tasklist | findstr python.exe || echo No Python processes found
+          tasklist | findstr python.exe && echo ✅ Python process found || echo ❌ No Python processes found
           echo.
           echo === SERVER OUTPUT LOG ===
           if exist server_output.log (
@@ -97,8 +126,16 @@ jobs:
             echo No server output log found
           )
           echo.
+          echo === HEALTH CHECK TEST ===
+          echo Testing server health endpoint...
+          python -c \"import requests; r=requests.get('http://localhost:8000/health', timeout=5); print('✅ Server responsive:', r.status_code, r.json())\" 2>&1 || echo ❌ Health check failed
+          echo.
           echo === MANUAL SERVER TEST ===
-          echo Testing if we can run main.py manually...
-          timeout 10 python main.py || echo Server failed to start or crashed
-          echo === END VERIFICATION ===
+          echo If server not running, testing manual startup...
+          if not exist nul (
+            tasklist | findstr python.exe >nul || (
+              echo No server running, testing manual start...
+              timeout 10 python main.py || echo Server failed to start
+            )
+          )
         "
