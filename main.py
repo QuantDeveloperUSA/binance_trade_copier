@@ -265,32 +265,30 @@ async def copy_to_slaves(trade_data: Dict, master_id: str):
             continue
         
         try:
-            # Get slave balance
-            slave_balance = await get_account_balance(slave_client)
-            
-            # Calculate slave quantity
-            slave_qty = calculate_slave_quantity(
-                quantity, master_balance, slave_balance, slave['multiplier']
+            # Calculate slave quantity using the correct function signature
+            slave_qty = await calculate_slave_quantity(
+                slave, quantity, symbol, slave_client
             )
             
             if slave_qty <= 0:
+                logger.warning(f"Skipping trade for slave {slave_id}: calculated quantity is 0")
                 continue
             
             # Place slave order
-            if side == 'BUY':
-                order = await slave_client.futures_create_order(
-                    symbol=symbol,
-                    side='BUY',
-                    type='MARKET',
-                    quantity=slave_qty
-                )
-            else:
-                order = await slave_client.futures_create_order(
-                    symbol=symbol,
-                    side='SELL',
-                    type='MARKET',
-                    quantity=slave_qty
-                )
+            order_params = {
+                'symbol': symbol,
+                'side': side,
+                'type': 'MARKET',
+                'quantity': slave_qty
+            }
+            
+            # Check position mode for the slave
+            position_mode = await slave_client.futures_get_position_mode()
+            if position_mode.get('dualSidePosition', False):
+                # In hedge mode, need to specify position side
+                order_params['positionSide'] = 'LONG' if side == 'BUY' else 'SHORT'
+            
+            order = await slave_client.futures_create_order(**order_params)
             
             # Record successful trade
             trade_record = {
@@ -300,7 +298,7 @@ async def copy_to_slaves(trade_data: Dict, master_id: str):
                 "symbol": symbol,
                 "side": side,
                 "quantity": slave_qty,
-                "price": price,
+                "price": float(order.get('avgPrice', price)),
                 "status": "success",
                 "error": None
             }
@@ -322,6 +320,10 @@ async def copy_to_slaves(trade_data: Dict, master_id: str):
             }
             save_trade(trade_record)
             logger.error(f"Failed to copy trade to slave {slave_id}: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error copying to slave {slave_id}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
         
         # Rate limit delay
         await asyncio.sleep(API_RATE_LIMIT_DELAY)
@@ -368,6 +370,50 @@ async def connect_slave(slave_id: str, api_key: str, api_secret: str):
         logger.info(f"Connected slave {slave_id}")
     except Exception as e:
         logger.error(f"Failed to connect slave {slave_id}: {e}")
+
+# Quantity calculation function
+async def calculate_slave_quantity(slave_account: Dict, master_quantity: float, symbol: str, client: AsyncClient) -> float:
+    """Calculate the appropriate quantity for a slave account based on risk management"""
+    try:
+        # Get slave account balance
+        account_info = await client.futures_account()
+        balance = float(account_info.get('totalWalletBalance', 0))
+        
+        # Get current price
+        ticker = await client.futures_symbol_ticker(symbol=symbol)
+        current_price = float(ticker['price'])
+        
+        # Calculate position value
+        master_position_value = master_quantity * current_price
+        
+        # Apply risk percentage
+        risk_percentage = slave_account.get('risk_percentage', 1.0) / 100.0
+        max_position_value = balance * risk_percentage
+        
+        # Calculate slave quantity
+        if master_position_value > max_position_value:
+            # Scale down to match risk limit
+            slave_quantity = max_position_value / current_price
+        else:
+            # Use same quantity as master
+            slave_quantity = master_quantity
+        
+        # Round to appropriate decimals (3 for most cryptos)
+        slave_quantity = round(slave_quantity, 3)
+        
+        # Check minimum notional value (Binance minimum is $20)
+        min_notional = 20.0
+        if slave_quantity * current_price < min_notional:
+            logger.warning(f"Calculated quantity {slave_quantity} is below minimum notional ${min_notional}")
+            slave_quantity = round(min_notional / current_price * 1.1, 3)  # Add 10% buffer
+        
+        logger.info(f"Calculated slave quantity: {slave_quantity} (master: {master_quantity})")
+        return slave_quantity
+        
+    except Exception as e:
+        logger.error(f"Error calculating slave quantity: {e}")
+        # Return 0 to skip this trade
+        return 0
 
 # API Endpoints
 @app.on_event("startup")
