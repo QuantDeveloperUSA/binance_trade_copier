@@ -612,9 +612,37 @@ async def get_account_balance_endpoint(account_id: str):
 
 if __name__ == "__main__":
     try:
-        logger.info("Starting Binance Trade Copier application...")
-        logger.info(f"Server will be available at http://0.0.0.0:8000")
-        uvicorn.run(app, host="0.0.0.0", port=8000)
+        logger.info("=" * 50)
+        logger.info("STARTING BINANCE TRADE COPIER APPLICATION")
+        logger.info("=" * 50)
+        logger.info("Initializing application...")
+        
+        # Verify data directory exists
+        if not DATA_DIR.exists():
+            logger.info(f"Creating data directory: {DATA_DIR}")
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # Check if data files exist
+        for file_path, default_content in [
+            (ACCOUNTS_FILE, "{}"),
+            (TRADES_FILE, "[]"),
+            (SYSTEM_FILE, '{"copying_active": false}')
+        ]:
+            if not file_path.exists():
+                logger.info(f"Creating default file: {file_path}")
+                file_path.write_text(default_content)
+        
+        logger.info("Data files verified")
+        logger.info(f"Server starting on http://0.0.0.0:8000")
+        logger.info("Health endpoint: http://0.0.0.0:8000/health")
+        logger.info("Web interface: http://0.0.0.0:8000")
+        logger.info("=" * 50)
+        
+        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
     except Exception as e:
-        logger.error(f"Failed to start application: {e}")
+        logger.error(f"CRITICAL ERROR: Failed to start application: {e}")
+        logger.error("Check the error details above")
+        import traceback
+        logger.error(traceback.format_exc())
+        input("Press Enter to exit...")  # Keep console open to see error
         raise

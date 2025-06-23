@@ -27,47 +27,54 @@ jobs:
         
     - name: Test SSH connection
       run: |
-        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "echo 'SSH connection successful'"
+        echo "Testing SSH connection..."
+        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "echo 'SSH connection successful'"
         
     - name: Create deployment directory
       run: |
-        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "if not exist ${{ env.DEPLOY_PATH }} mkdir ${{ env.DEPLOY_PATH }}"
+        echo "Creating deployment directory..."
+        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=30 ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "if not exist ${{ env.DEPLOY_PATH }} mkdir ${{ env.DEPLOY_PATH }}"
         
     - name: Stop Python processes
       run: |
-        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+        echo "Stopping any running Python processes..."
+        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=30 ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
           echo Stopping all Python processes...
           taskkill /f /im python.exe 2>nul || echo No Python processes to kill
-          taskkill /f /im pythonw.exe 2>nul || echo No Pythonw processes to kill          timeout /t 3 /nobreak >nul
+          taskkill /f /im pythonw.exe 2>nul || echo No Pythonw processes to kill
+          timeout /t 3 /nobreak >nul
+          echo Process cleanup completed
         "
         
     - name: Deploy all files
       run: |
         echo "Deploying all repository files..."
         sshpass -p '${{ secrets.VPS_PASSWORD }}' scp -o StrictHostKeyChecking=no -r ./* ${{ env.VPS_USER }}@${{ env.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
+        echo "File deployment completed"
         
-    - name: Install dependencies and start server
+    - name: Setup environment and install dependencies
       run: |
-        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
-          cd ${{ env.DEPLOY_PATH }}
+        echo "Setting up Python environment and installing dependencies..."
+        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=60 ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          cd ${{ env.DEPLOY_PATH }} || (echo Failed to change directory && exit 1)
           echo Current directory: %CD%
           echo.
           echo === PYTHON DIAGNOSTICS ===
-          python --version 2>&1 || echo Python command failed
-          where python 2>&1 || echo Python not in PATH
+          python --version || (echo Python not found && exit 1)
+          where python || echo Python location not found
           echo.
           echo === FILE CHECK ===
           if exist main.py (
             echo ✅ main.py found
           ) else (
             echo ❌ main.py NOT found
-            exit /b 1
+            exit 1
           )
           if exist requirements.txt (
             echo ✅ requirements.txt found
           ) else (
             echo ❌ requirements.txt NOT found
-            exit /b 1
+            exit 1
           )
           echo.
           echo === DATA DIRECTORY SETUP ===
@@ -79,37 +86,52 @@ jobs:
           echo.
           echo === DEPENDENCIES ===
           echo Installing Python dependencies...
-          python -m pip install -r requirements.txt --upgrade 2>&1 || (
+          python -m pip install -r requirements.txt --upgrade || (
             echo ❌ Pip install failed
-            exit /b 1
+            exit 1
           )
-          echo ✅ Dependencies installed
+          echo ✅ Dependencies installed successfully
           echo.
-          echo === SYNTAX CHECK ===
-          python -c \"import ast; ast.parse(open('main.py').read()); print('✅ Syntax OK')\" 2>&1 || (
+          echo === SYNTAX AND IMPORT CHECKS ===
+          python -c \"import ast; ast.parse(open('main.py').read()); print('✅ Syntax OK')\" || (
             echo ❌ Syntax error in main.py
-            exit /b 1
+            exit 1
           )
-          echo.
-          echo === IMPORT TEST ===
-          python -c \"import config, fastapi, uvicorn; print('✅ Core imports OK')\" 2>&1 || (
+          python -c \"import config, fastapi, uvicorn; print('✅ Core imports OK')\" || (
             echo ❌ Import test failed  
-            exit /b 1
+            exit 1
           )
-          echo.
+          echo All checks passed successfully
+        "
+        
+    - name: Start server
+      run: |
+        echo "Starting FastAPI server..."
+        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=30 ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          cd ${{ env.DEPLOY_PATH }}
           echo === STARTING SERVER ===
           echo Starting FastAPI server in background...
           start /b cmd /c \"python main.py > server_output.log 2>&1\"
-          echo Waiting 5 seconds for server startup...
-          timeout /t 5 /nobreak >nul
+          echo Server start command issued
+          echo Waiting 10 seconds for server startup...
+          timeout /t 10 /nobreak >nul
           echo.
           echo === SERVER STATUS CHECK ===
           tasklist | findstr python.exe && echo ✅ Python process running || echo ❌ No Python process found
-        "        
-    - name: Verify deployment and debug server
+          echo.
+          echo === SERVER OUTPUT ===
+          if exist server_output.log (
+            echo Server output log contents:
+            type server_output.log
+          ) else (
+            echo No server output log found
+          )
+        "
+        
+    - name: Verify deployment and test server
       run: |
-        echo "Checking deployment status and server health..."
-        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+        echo "Final verification and server health check..."
+        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=30 ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
           cd ${{ env.DEPLOY_PATH }}
           echo === DEPLOYMENT VERIFICATION ===
           echo Directory contents:
@@ -118,24 +140,19 @@ jobs:
           echo === PYTHON PROCESSES ===
           tasklist | findstr python.exe && echo ✅ Python process found || echo ❌ No Python processes found
           echo.
-          echo === SERVER OUTPUT LOG ===
+          echo === CURRENT SERVER OUTPUT ===
           if exist server_output.log (
-            echo Server output:
-            type server_output.log
+            echo Latest server output:
+            type server_output.log | more
           ) else (
             echo No server output log found
           )
           echo.
           echo === HEALTH CHECK TEST ===
           echo Testing server health endpoint...
-          python -c \"import requests; r=requests.get('http://localhost:8000/health', timeout=5); print('✅ Server responsive:', r.status_code, r.json())\" 2>&1 || echo ❌ Health check failed
+          python -c \"import requests; r=requests.get('http://localhost:8000/health', timeout=10); print('✅ Server responsive - Status:', r.status_code); print('Response:', r.json())\" 2>&1 || echo ❌ Health check failed - server may not be running
           echo.
-          echo === MANUAL SERVER TEST ===
-          echo If server not running, testing manual startup...
-          if not exist nul (
-            tasklist | findstr python.exe >nul || (
-              echo No server running, testing manual start...
-              timeout 10 python main.py || echo Server failed to start
-            )
-          )
+          echo === DEPLOYMENT COMPLETE ===
+          echo Server should be accessible at http://${{ env.VPS_HOST }}:8000
+          echo Health endpoint: http://${{ env.VPS_HOST }}:8000/health
         "
