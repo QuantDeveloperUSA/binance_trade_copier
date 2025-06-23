@@ -100,59 +100,79 @@ jobs:
           python -c \"import config, fastapi, uvicorn; print('✅ Core imports OK')\" || (
             echo ❌ Import test failed  
             exit 1
-          )
-          echo All checks passed successfully
+          )          echo All checks passed successfully
         "
         
     - name: Start server
       run: |
-        echo "Starting FastAPI server..."
+        echo "Starting FastAPI server with auto-restart wrapper..."
         sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=30 ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
           cd ${{ env.DEPLOY_PATH }}
           echo === STARTING SERVER ===
-          echo Starting FastAPI server in background...
-          start /b cmd /c \"python main.py > server_output.log 2>&1\"
-          echo Server start command issued
-          echo Waiting 10 seconds for server startup...
-          timeout /t 10 /nobreak >nul
+          echo Checking if server is already running...
+          tasklist | findstr python.exe && (
+            echo Existing Python processes found - stopping them first
+            taskkill /f /im python.exe 2>nul || echo No processes to kill
+            timeout /t 3 /nobreak >nul
+          ) || echo No existing Python processes
+          echo.
+          echo Starting FastAPI server with wrapper script...
+          start /b \"TradeServer\" cmd /c \"start_server.bat\"
+          echo Server start command issued with wrapper
+          echo Waiting 15 seconds for server startup...
+          timeout /t 15 /nobreak >nul
           echo.
           echo === SERVER STATUS CHECK ===
           tasklist | findstr python.exe && echo ✅ Python process running || echo ❌ No Python process found
           echo.
-          echo === SERVER OUTPUT ===
+          echo === SERVER OUTPUT (Last 20 lines) ===
           if exist server_output.log (
-            echo Server output log contents:
-            type server_output.log
+            echo Recent server output:
+            powershell \"Get-Content server_output.log -Tail 20\"
           ) else (
-            echo No server output log found
-          )
+            echo No server output log found          )
         "
         
     - name: Verify deployment and test server
       run: |
-        echo "Final verification and server health check..."
+        echo "Final verification and comprehensive server health check..."
         sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=30 ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
           cd ${{ env.DEPLOY_PATH }}
           echo === DEPLOYMENT VERIFICATION ===
           echo Directory contents:
           dir /b
           echo.
-          echo === PYTHON PROCESSES ===
+          echo === PYTHON PROCESSES (Detailed) ===
+          echo All Python processes:
           tasklist | findstr python.exe && echo ✅ Python process found || echo ❌ No Python processes found
           echo.
-          echo === CURRENT SERVER OUTPUT ===
+          echo Command line details:
+          wmic process where \"name='python.exe'\" get processid,commandline /format:list 2>nul || echo No Python processes or wmic unavailable
+          echo.
+          echo === CURRENT SERVER OUTPUT (Last 30 lines) ===
           if exist server_output.log (
             echo Latest server output:
-            type server_output.log | more
+            powershell \"Get-Content server_output.log -Tail 30\"
           ) else (
             echo No server output log found
           )
           echo.
+          echo === PORT USAGE CHECK ===
+          echo Checking if port 8000 is in use:
+          netstat -an | findstr :8000 && echo ✅ Port 8000 is active || echo ❌ Port 8000 not in use
+          echo.
           echo === HEALTH CHECK TEST ===
           echo Testing server health endpoint...
-          python -c \"import requests; r=requests.get('http://localhost:8000/health', timeout=10); print('✅ Server responsive - Status:', r.status_code); print('Response:', r.json())\" 2>&1 || echo ❌ Health check failed - server may not be running
+          python -c \"import requests; r=requests.get('http://localhost:8000/health', timeout=10); print('✅ Server responsive - Status:', r.status_code); print('Response:', r.json())\" 2>&1 || echo ❌ Health check failed - server may not be responding
           echo.
-          echo === DEPLOYMENT COMPLETE ===
-          echo Server should be accessible at http://${{ env.VPS_HOST }}:8000
+          echo === MANUAL CONNECTION TEST ===
+          echo Testing external connectivity...
+          python -c \"import requests; r=requests.get('http://127.0.0.1:8000/health', timeout=5); print('✅ Local connection OK')\" 2>&1 || echo ❌ Local connection failed
+          echo.
+          echo === DEPLOYMENT SUMMARY ===
+          echo Server should be accessible at: http://${{ env.VPS_HOST }}:8000
           echo Health endpoint: http://${{ env.VPS_HOST }}:8000/health
+          echo Web interface: http://${{ env.VPS_HOST }}:8000
+          echo Local server log: server_output.log
+          echo === END VERIFICATION ===
         "
