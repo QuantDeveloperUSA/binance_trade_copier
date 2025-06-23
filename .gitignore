@@ -73,3 +73,6 @@ ssh_config/authorized_keys
 **/secrets.txt
 **/*_credentials.*
 **/*_secrets.*
+
+# Data directory (contains sensitive account info and trade data)
+data/

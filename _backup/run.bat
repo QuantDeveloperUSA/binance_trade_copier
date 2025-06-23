@@ -1,6 +1,0 @@
-@echo off
-echo Installing requirements...
-pip install -r requirements.txt
-
-echo Starting Binance Copy Trading System...
-python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
