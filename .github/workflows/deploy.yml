@@ -51,20 +51,54 @@ jobs:
       run: |
         sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
           cd ${{ env.DEPLOY_PATH }}
+          echo Current directory: %CD%
+          echo Checking Python installation...
+          python --version || echo Python not found in PATH
+          where python || echo Python executable not located
+          echo.
+          echo Checking main.py...
+          if exist main.py (echo main.py found) else (echo main.py NOT found)
+          echo.
           echo Installing Python dependencies...
-          python -m pip install -r requirements.txt --upgrade
-          echo Starting server...
-          start /b python main.py
-          echo Server started successfully
+          python -m pip install -r requirements.txt --upgrade 2>&1
+          echo.
+          echo Testing main.py syntax...
+          python -m py_compile main.py || echo Syntax error in main.py
+          echo.
+          echo Starting server with full output...
+          python main.py > server_output.log 2>&1 &
+          echo Server start command executed
+          timeout /t 5 /nobreak >nul
+          echo.
+          echo Checking if server is running...
+          tasklist | findstr python.exe || echo No Python processes found
+          echo.
+          echo Server output log:
+          type server_output.log 2>nul || echo No server output log found
         "
         
-    - name: Verify deployment
+    - name: Verify deployment and debug server
       run: |
-        echo "Deployment completed!"
+        echo "Checking deployment status and server health..."
         sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
           cd ${{ env.DEPLOY_PATH }}
+          echo === DEPLOYMENT VERIFICATION ===
           echo Directory contents:
           dir /b
-          echo Python processes:
+          echo.
+          echo === PYTHON PROCESSES ===
           tasklist | findstr python.exe || echo No Python processes found
+          echo.
+          echo === SERVER OUTPUT LOG ===
+          if exist server_output.log (
+            echo Server output:
+            type server_output.log
+          ) else (
+            echo No server output log found
+          )
+          echo.
+          echo === MANUAL SERVER TEST ===
+          echo Testing if we can run main.py manually...
+          timeout 10 python main.py || echo Server failed to start or crashed
+          echo === END VERIFICATION ===
         "
