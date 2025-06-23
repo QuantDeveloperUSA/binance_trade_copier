@@ -1,4 +1,4 @@
-name: Deploy to Windows VPS
+﻿name: Deploy to Windows VPS
 
 on:
   push:
@@ -33,7 +33,17 @@ jobs:
     - name: Create deployment directory
       run: |
         echo "Creating deployment directory..."
-        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=30 ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "if not exist ${{ env.DEPLOY_PATH }} mkdir ${{ env.DEPLOY_PATH }}"
+        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=30 ${{ env.VPS_USER }}@${{ env.VPS_HOST }} '
+          echo Creating directory C:\trade_copier if it does not exist...
+          if not exist "C:\trade_copier" mkdir "C:\trade_copier"
+          if exist "C:\trade_copier" (
+            echo [SUCCESS] Directory exists or was created successfully
+          ) else (
+            echo [ERROR] Failed to create directory
+          )
+          echo Current directory contents:
+          dir C:\ | findstr trade_copier || echo Directory not visible in listing
+        '
         
     - name: Ensure Git is available on VPS
       run: |
@@ -41,10 +51,10 @@ jobs:
         sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=30 ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
           echo === CHECKING GIT INSTALLATION ===
           git --version 2>nul && (
-            echo ✅ Git is already installed
+            echo âœ… Git is already installed
             git --version
           ) || (
-            echo ❌ Git not found, attempting to install...
+            echo âŒ Git not found, attempting to install...
             echo Checking if winget is available...
             winget --version 2>nul && (
               echo Installing Git via winget...
@@ -72,7 +82,8 @@ jobs:
           taskkill /f /im python.exe 2>nul || echo No Python processes to kill
           taskkill /f /im pythonw.exe 2>nul || echo No Pythonw processes to kill
           timeout /t 3 /nobreak >nul
-          echo Process cleanup completed        "
+          echo Process cleanup completed
+        "
         
     - name: Deploy via Git pull
       run: |
@@ -98,7 +109,7 @@ jobs:
             echo.
             echo === CLEANING UNTRACKED FILES ===
             git clean -fd 2>&1 || echo Git clean failed
-            echo ✅ Repository updated via Git pull
+            echo âœ… Repository updated via Git pull
           ) else (
             echo No Git repository found, initializing fresh clone...
             echo Removing existing files...
@@ -114,7 +125,7 @@ jobs:
             echo === MOVING FILES FROM CLONE ===
             xcopy temp_clone\\*.* . /E /Y /I 2>nul || echo File copy from clone failed
             rd /s /q temp_clone 2>nul || echo Cleanup of temp clone failed
-            echo ✅ Repository cloned successfully
+            echo âœ… Repository cloned successfully
           )
           echo.
           echo === DEPLOYMENT VERIFICATION ===
@@ -130,7 +141,8 @@ jobs:
           echo Git operations failed, manual file copying will be used in next step
           echo This step completed with Git fallback notice
           
-          :end_deployment          echo Deployment via Git completed
+          :end_deployment
+          echo Deployment via Git completed
         "
         
     - name: Fallback deployment if Git failed
@@ -139,9 +151,9 @@ jobs:
         sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=30 ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
           cd ${{ env.DEPLOY_PATH }}
           if exist main.py (
-            echo ✅ main.py found - Git deployment appears successful
+            echo âœ… main.py found - Git deployment appears successful
           ) else (
-            echo ❌ main.py not found - Git deployment may have failed
+            echo âŒ main.py not found - Git deployment may have failed
             echo Using SCP fallback deployment...
             exit /b 1
           )
@@ -164,15 +176,15 @@ jobs:
           echo.
           echo === FILE CHECK ===
           if exist main.py (
-            echo ✅ main.py found
+            echo âœ… main.py found
           ) else (
-            echo ❌ main.py NOT found
+            echo âŒ main.py NOT found
             exit 1
           )
           if exist requirements.txt (
-            echo ✅ requirements.txt found
+            echo âœ… requirements.txt found
           ) else (
-            echo ❌ requirements.txt NOT found
+            echo âŒ requirements.txt NOT found
             exit 1
           )
           echo.
@@ -186,17 +198,18 @@ jobs:
           echo === DEPENDENCIES ===
           echo Installing Python dependencies...
           python -m pip install -r requirements.txt --upgrade || (
-            echo ❌ Pip install failed
+            echo âŒ Pip install failed
             exit 1
           )
-          echo ✅ Dependencies installed successfully
+          echo âœ… Dependencies installed successfully
           echo.
           echo === SYNTAX AND IMPORT CHECKS ===
-          python -c \"import ast; ast.parse(open('main.py').read()); print('✅ Syntax OK')\" || (
-            echo ❌ Syntax error in main.py
+          python -c \"import ast; ast.parse(open('main.py').read()); print('âœ… Syntax OK')\" || (
+            echo âŒ Syntax error in main.py
             exit 1
-          )          python -c \"import config, fastapi, uvicorn; print('✅ Core imports OK')\" || (
-            echo ❌ Import test failed  
+          )
+          python -c \"import config, fastapi, uvicorn; print('âœ… Core imports OK')\" || (
+            echo âŒ Import test failed  
             exit 1
           )
           echo All checks passed successfully
@@ -212,7 +225,8 @@ jobs:
           tasklist | findstr python.exe && (
             echo Existing Python processes found - stopping them first
             taskkill /f /im python.exe 2>nul || echo No processes to kill
-            timeout /t 3 /nobreak >nul          ) || echo No existing Python processes
+            timeout /t 3 /nobreak >nul
+          ) || echo No existing Python processes
           echo.
           echo Starting FastAPI server with wrapper script...
           start /b \"TradeServer\" cmd /c \"windows_server_start.bat automated\"
@@ -221,12 +235,13 @@ jobs:
           timeout /t 20 /nobreak >nul
           echo.
           echo === SERVER STATUS CHECK ===
-          tasklist | findstr python.exe && echo ✅ Python process running || echo ❌ No Python process found
+          tasklist | findstr python.exe && echo âœ… Python process running || echo âŒ No Python process found
           echo.
           echo === SERVER OUTPUT (Last 20 lines) ===
           if exist server_output.log (
             echo Recent server output:
-            powershell \"Get-Content server_output.log -Tail 20\"          ) else (
+            powershell \"Get-Content server_output.log -Tail 20\"
+          ) else (
             echo No server output log found
           )
         "
@@ -244,46 +259,46 @@ jobs:
           echo === LOG FILES CHECK ===
           echo Checking for expected log files:
           if exist server_output.log (
-            echo ✅ server_output.log found
+            echo âœ… server_output.log found
             echo File size:
             dir server_output.log | findstr server_output.log
             echo Content:
             type server_output.log
           ) else (
-            echo ❌ server_output.log NOT found
+            echo âŒ server_output.log NOT found
           )
           echo.
           if exist server_debug.log (
-            echo ✅ server_debug.log found
+            echo âœ… server_debug.log found
             echo Content:
             type server_debug.log
           ) else (
-            echo ❌ server_debug.log NOT found
+            echo âŒ server_debug.log NOT found
           )
           echo.
           if exist binance_trade_copier.log (
-            echo ✅ binance_trade_copier.log found
+            echo âœ… binance_trade_copier.log found
             echo Content:
             type binance_trade_copier.log
           ) else (
-            echo ❌ binance_trade_copier.log NOT found
+            echo âŒ binance_trade_copier.log NOT found
           )
           echo.
           echo === STARTUP SCRIPT TESTING ===
           echo Testing if startup scripts exist:
           if exist windows_server_start.bat (
-            echo ✅ windows_server_start.bat found
+            echo âœ… windows_server_start.bat found
           ) else (
-            echo ❌ windows_server_start.bat NOT found - using manual test
+            echo âŒ windows_server_start.bat NOT found - using manual test
             echo === MANUAL PYTHON TEST ===
             echo Testing direct Python execution to create logs:
             timeout 5 python main.py > direct_test.log 2>&1
             if exist direct_test.log (
-              echo ✅ Direct main.py execution created log
+              echo âœ… Direct main.py execution created log
               echo Content:
               type direct_test.log
             ) else (
-              echo ❌ Direct main.py execution failed to create log
+              echo âŒ Direct main.py execution failed to create log
             )
           )
           echo.
@@ -294,9 +309,9 @@ jobs:
           echo === PERMISSIONS AND ENVIRONMENT ===
           echo Testing file creation:
           echo Test > test_file.log && (
-            echo ✅ File creation works
+            echo âœ… File creation works
             del test_file.log
-          ) || echo ❌ File creation failed
+          ) || echo âŒ File creation failed
           echo.
           echo Current user: %USERNAME%
           echo Current directory: %CD%
@@ -334,13 +349,13 @@ jobs:
           echo.
           echo === MANUAL PYTHON TEST ===
           echo Testing direct Python execution:
-          python -c \"print('✅ Python direct execution works')\" && echo Python execution successful || echo ❌ Python execution failed
+          python -c \"print('âœ… Python direct execution works')\" && echo Python execution successful || echo âŒ Python execution failed
           echo.
           echo Testing imports individually:
-          python -c \"import asyncio; print('✅ asyncio OK')\" 2>&1 || echo ❌ asyncio failed
-          python -c \"import uvicorn; print('✅ uvicorn OK')\" 2>&1 || echo ❌ uvicorn failed
-          python -c \"import fastapi; print('✅ fastapi OK')\" 2>&1 || echo ❌ fastapi failed
-          python -c \"import binance; print('✅ binance OK')\" 2>&1 || echo ❌ binance failed
+          python -c \"import asyncio; print('âœ… asyncio OK')\" 2>&1 || echo âŒ asyncio failed
+          python -c \"import uvicorn; print('âœ… uvicorn OK')\" 2>&1 || echo âŒ uvicorn failed
+          python -c \"import fastapi; print('âœ… fastapi OK')\" 2>&1 || echo âŒ fastapi failed
+          python -c \"import binance; print('âœ… binance OK')\" 2>&1 || echo âŒ binance failed
           echo.
           echo === COMPREHENSIVE WINDOWS TEST ===
           python windows_test.py 2>&1 || echo Windows test script failed
@@ -357,7 +372,7 @@ jobs:
           echo.
           echo === PYTHON PROCESSES (Detailed) ===
           echo All Python processes:
-          tasklist | findstr python.exe && echo ✅ Python process found || echo ❌ No Python processes found
+          tasklist | findstr python.exe && echo âœ… Python process found || echo âŒ No Python processes found
           echo.
           echo Command line details:
           wmic process where \"name='python.exe'\" get processid,commandline /format:list 2>nul || echo No Python processes or wmic unavailable
@@ -372,15 +387,15 @@ jobs:
           echo.
           echo === PORT USAGE CHECK ===
           echo Checking if port 8000 is in use:
-          netstat -an | findstr :8000 && echo ✅ Port 8000 is active || echo ❌ Port 8000 not in use
+          netstat -an | findstr :8000 && echo âœ… Port 8000 is active || echo âŒ Port 8000 not in use
           echo.
           echo === HEALTH CHECK TEST ===
           echo Testing server health endpoint...
-          python -c \"import requests; r=requests.get('http://localhost:8000/health', timeout=10); print('✅ Server responsive - Status:', r.status_code); print('Response:', r.json())\" 2>&1 || echo ❌ Health check failed - server may not be responding
+          python -c \"import requests; r=requests.get('http://localhost:8000/health', timeout=10); print('âœ… Server responsive - Status:', r.status_code); print('Response:', r.json())\" 2>&1 || echo âŒ Health check failed - server may not be responding
           echo.
           echo === MANUAL CONNECTION TEST ===
           echo Testing external connectivity...
-          python -c \"import requests; r=requests.get('http://127.0.0.1:8000/health', timeout=5); print('✅ Local connection OK')\" 2>&1 || echo ❌ Local connection failed
+          python -c \"import requests; r=requests.get('http://127.0.0.1:8000/health', timeout=5); print('âœ… Local connection OK')\" 2>&1 || echo âŒ Local connection failed
           echo.
           echo === DEPLOYMENT SUMMARY ===
           echo Server should be accessible at: http://${{ env.VPS_HOST }}:8000
