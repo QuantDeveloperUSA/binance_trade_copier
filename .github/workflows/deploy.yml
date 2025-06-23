@@ -220,15 +220,86 @@ jobs:
           echo Waiting 20 seconds for server startup and stability check...
           timeout /t 20 /nobreak >nul
           echo.
-          echo === SERVER STATUS CHECK ===          tasklist | findstr python.exe && echo ✅ Python process running || echo ❌ No Python process found
+          echo === SERVER STATUS CHECK ===
+          tasklist | findstr python.exe && echo ✅ Python process running || echo ❌ No Python process found
           echo.
           echo === SERVER OUTPUT (Last 20 lines) ===
           if exist server_output.log (
             echo Recent server output:
-            powershell \"Get-Content server_output.log -Tail 20\"
-          ) else (
+            powershell \"Get-Content server_output.log -Tail 20\"          ) else (
             echo No server output log found
           )
+        "
+        
+    - name: Debug server startup failure
+      run: |
+        echo "Comprehensive debugging of server startup failure..."
+        sshpass -p '${{ secrets.VPS_PASSWORD }}' ssh -o ConnectTimeout=30 ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          cd ${{ env.DEPLOY_PATH }}
+          echo === SERVER STARTUP DEBUGGING ===
+          echo.
+          echo === CURRENT DIRECTORY CONTENTS ===
+          dir /b
+          echo.
+          echo === LOG FILES CHECK ===
+          echo Checking for expected log files:
+          if exist server_output.log (
+            echo ✅ server_output.log found
+            echo File size:
+            dir server_output.log | findstr server_output.log
+            echo Content:
+            type server_output.log
+          ) else (
+            echo ❌ server_output.log NOT found
+          )
+          echo.
+          if exist server_debug.log (
+            echo ✅ server_debug.log found
+            echo Content:
+            type server_debug.log
+          ) else (
+            echo ❌ server_debug.log NOT found
+          )
+          echo.
+          if exist binance_trade_copier.log (
+            echo ✅ binance_trade_copier.log found
+            echo Content:
+            type binance_trade_copier.log
+          ) else (
+            echo ❌ binance_trade_copier.log NOT found
+          )
+          echo.
+          echo === STARTUP SCRIPT TESTING ===
+          echo Testing if startup scripts exist:
+          if exist windows_server_start.bat (
+            echo ✅ windows_server_start.bat found
+          ) else (
+            echo ❌ windows_server_start.bat NOT found - using manual test
+            echo === MANUAL PYTHON TEST ===
+            echo Testing direct Python execution to create logs:
+            timeout 5 python main.py > direct_test.log 2>&1
+            if exist direct_test.log (
+              echo ✅ Direct main.py execution created log
+              echo Content:
+              type direct_test.log
+            ) else (
+              echo ❌ Direct main.py execution failed to create log
+            )
+          )
+          echo.
+          echo === PROCESS ANALYSIS ===
+          echo Current Python processes:
+          tasklist | findstr python.exe || echo No Python processes found
+          echo.
+          echo === PERMISSIONS AND ENVIRONMENT ===
+          echo Testing file creation:
+          echo Test > test_file.log && (
+            echo ✅ File creation works
+            del test_file.log
+          ) || echo ❌ File creation failed
+          echo.
+          echo Current user: %USERNAME%
+          echo Current directory: %CD%
         "
         
     - name: Windows system diagnostics
