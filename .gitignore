@@ -76,3 +76,6 @@ ssh_config/authorized_keys
 
 # Data directory (contains sensitive account info and trade data)
 data/
+
+# Documentation directory (local only, not synchronized)
+documentation/
