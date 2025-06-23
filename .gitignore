@@ -29,6 +29,8 @@ Thumbs.db
 test_*.txt
 *test*.bat
 *diagnostic*.bat
+check_deployment.bat
+check_vps_deployment.ps1
 
 # Temporary files
 *.tmp
