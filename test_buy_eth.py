@@ -17,7 +17,7 @@ DATA_DIR = Path(__file__).parent / "data"
 ACCOUNTS_FILE = DATA_DIR / "accounts.json"
 
 async def test_buy_eth():
-    """Test buying 0.001 ETH on the master account"""
+    """Test buying ETH on the master account"""
     
     # Load accounts
     with open(ACCOUNTS_FILE, 'r') as f:
@@ -53,13 +53,26 @@ async def test_buy_eth():
         
         # Define order parameters
         symbol = 'ETHUSDT'
-        quantity = 0.001  # 0.001 ETH
+        min_notional = 20.0  # Binance minimum order value in USDT
         
         # Get current ETH price for info
         ticker = await client.futures_symbol_ticker(symbol=symbol)
         current_price = float(ticker['price'])
         logger.info(f"Current ETH price: ${current_price:.2f}")
-        logger.info(f"Order value: ${current_price * quantity:.2f}")
+        
+        # Calculate minimum quantity needed
+        min_quantity = min_notional / current_price
+        quantity = round(min_quantity * 1.1, 3)  # Add 10% buffer and round to 3 decimals
+        order_value = current_price * quantity
+        
+        logger.info(f"Minimum order value: ${min_notional}")
+        logger.info(f"Calculated quantity: {quantity} ETH")
+        logger.info(f"Order value: ${order_value:.2f}")
+        
+        # Check if we have enough balance
+        if balance < order_value * 0.1:  # Need at least 10% for margin
+            logger.error(f"Insufficient balance. Need at least ${order_value * 0.1:.2f} for margin")
+            return
         
         # Place market buy order
         logger.info(f"Placing market buy order for {quantity} ETH...")
@@ -116,7 +129,7 @@ async def main():
     logger.info("BINANCE ETH BUY TEST")
     logger.info("=" * 50)
     
-    confirm = input("\n⚠️  This will place a REAL order to buy 0.001 ETH. Continue? (yes/no): ")
+    confirm = input("\n⚠️  This will place a REAL order to buy ETH (minimum $20 value). Continue? (yes/no): ")
     if confirm.lower() != 'yes':
         logger.info("Test cancelled by user")
         return
