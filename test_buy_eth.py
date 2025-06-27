@@ -5,25 +5,20 @@ from pathlib import Path
 from binance import AsyncClient
 from binance.exceptions import BinanceAPIException
 
-# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Load account data
 DATA_DIR = Path(__file__).parent / "data"
 ACCOUNTS_FILE = DATA_DIR / "accounts.json"
 
 async def test_buy_eth():
-    """Test buying ETH on the master account"""
     
-    # Load accounts
     with open(ACCOUNTS_FILE, 'r') as f:
         data = json.load(f)
     
-    # Find master account
     master_account = None
     for account in data['accounts']:
         if account['type'] == 'master' and account['id'] == 'master_1':
@@ -36,7 +31,6 @@ async def test_buy_eth():
     
     logger.info(f"Using master account: {master_account['id']}")
     
-    # Connect to Binance
     client = None
     try:
         logger.info("Connecting to Binance...")
@@ -45,27 +39,22 @@ async def test_buy_eth():
             master_account['api_secret']
         )
         
-        # Get account info to verify connection
         logger.info("Getting account balance...")
         account_info = await client.futures_account()
         balance = float(account_info.get('totalWalletBalance', 0))
         logger.info(f"Current balance: ${balance:.2f}")
         
-        # Check position mode
         position_mode = await client.futures_get_position_mode()
         dual_side_position = position_mode.get('dualSidePosition', False)
         logger.info(f"Position mode: {'Hedge Mode' if dual_side_position else 'One-way Mode'}")
         
-        # Define order parameters
         symbol = 'ETHUSDT'
-        min_notional = 20.0  # Binance minimum order value in USDT
+        min_notional = 20.0
         
-        # Get current ETH price for info
         ticker = await client.futures_symbol_ticker(symbol=symbol)
         current_price = float(ticker['price'])
         logger.info(f"Current ETH price: ${current_price:.2f}")
         
-        # Ask user for order size
         print(f"\nMinimum order value: ${min_notional}")
         order_value_input = input(f"Enter order value in USDT (minimum ${min_notional}): $")
         
@@ -78,22 +67,18 @@ async def test_buy_eth():
             logger.error("Invalid order value entered")
             return
         
-        # Calculate quantity
         quantity = round(order_value / current_price, 3)
         actual_value = current_price * quantity
         
         logger.info(f"Order quantity: {quantity} ETH")
         logger.info(f"Actual order value: ${actual_value:.2f}")
         
-        # Check if we have enough balance
-        if balance < actual_value * 0.1:  # Need at least 10% for margin
+        if balance < actual_value * 0.1:
             logger.error(f"Insufficient balance. Need at least ${actual_value * 0.1:.2f} for margin")
             return
         
-        # Place market buy order
         logger.info(f"Placing market buy order for {quantity} ETH...")
         
-        # Prepare order parameters
         order_params = {
             'symbol': symbol,
             'side': 'BUY',
@@ -101,13 +86,11 @@ async def test_buy_eth():
             'quantity': quantity
         }
         
-        # Add position side if in hedge mode
         if dual_side_position:
             order_params['positionSide'] = 'LONG'
         
         order = await client.futures_create_order(**order_params)
         
-        # Log order details
         logger.info("Order placed successfully!")
         logger.info(f"Order ID: {order['orderId']}")
         logger.info(f"Status: {order['status']}")
@@ -118,9 +101,7 @@ async def test_buy_eth():
         if 'avgPrice' in order:
             logger.info(f"Average Price: ${float(order['avgPrice']):.2f}")
         
-        # Get updated position
-        await asyncio.sleep(1)  # Wait a moment for position to update
-        # Fetch fresh account info for updated positions
+        await asyncio.sleep(1)
         account_info = await client.futures_account()
         positions = account_info.get('positions', [])
         eth_position = next((p for p in positions if p['symbol'] == symbol), None)
@@ -152,7 +133,6 @@ async def test_buy_eth():
             logger.info("Connection closed")
 
 async def main():
-    """Main function"""
     logger.info("=" * 50)
     logger.info("BINANCE FUTURES ETH BUY TEST")
     logger.info("=" * 50)

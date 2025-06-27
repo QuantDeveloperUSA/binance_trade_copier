@@ -6,32 +6,26 @@ from datetime import datetime
 from binance import AsyncClient
 from binance.exceptions import BinanceAPIException
 
-# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Load account data
 DATA_DIR = Path(__file__).parent / "data"
 ACCOUNTS_FILE = DATA_DIR / "accounts.json"
 
 async def check_slave_account(slave_id: str = None):
-    """Check slave account balance and transactions"""
     
-    # Load accounts
     with open(ACCOUNTS_FILE, 'r') as f:
         data = json.load(f)
     
-    # Find slave account
     slave_accounts = [acc for acc in data['accounts'] if acc['type'] == 'slave']
     
     if not slave_accounts:
         logger.error("No slave accounts found!")
         return
     
-    # If specific slave_id provided, find it
     if slave_id:
         slave_account = next((acc for acc in slave_accounts if acc['id'] == slave_id), None)
         if not slave_account:
@@ -39,7 +33,6 @@ async def check_slave_account(slave_id: str = None):
             return
         slave_accounts = [slave_account]
     
-    # Check each slave account
     for slave in slave_accounts:
         logger.info("=" * 60)
         logger.info(f"Checking slave account: {slave['id']}")
@@ -47,25 +40,21 @@ async def check_slave_account(slave_id: str = None):
         
         client = None
         try:
-            # Connect to Binance
             logger.info("Connecting to Binance...")
             client = await AsyncClient.create(
                 slave['api_key'], 
                 slave['api_secret']
             )
             
-            # Get account info
             logger.info("\n📊 ACCOUNT INFORMATION")
             account_info = await client.futures_account()
             
-            # Display balances
             logger.info("\n💰 BALANCES:")
             logger.info(f"Total Wallet Balance: ${float(account_info.get('totalWalletBalance', 0)):.2f}")
             logger.info(f"Available Balance: ${float(account_info.get('availableBalance', 0)):.2f}")
             logger.info(f"Total Margin Balance: ${float(account_info.get('totalMarginBalance', 0)):.2f}")
             logger.info(f"Total Unrealized PnL: ${float(account_info.get('totalUnrealizedProfit', 0)):.2f}")
             
-            # Check individual assets
             logger.info("\n💎 ASSET BREAKDOWN:")
             assets = account_info.get('assets', [])
             for asset in assets:
@@ -73,7 +62,6 @@ async def check_slave_account(slave_id: str = None):
                 if wallet_balance > 0:
                     logger.info(f"{asset['asset']}: {wallet_balance:.4f} (${float(asset.get('marginBalance', 0)):.2f})")
             
-            # Check positions
             logger.info("\n📈 OPEN POSITIONS:")
             positions = account_info.get('positions', [])
             has_positions = False
@@ -91,7 +79,6 @@ async def check_slave_account(slave_id: str = None):
             if not has_positions:
                 logger.info("No open positions")
             
-            # Get recent trades
             logger.info("\n📜 RECENT TRADES (Last 10):")
             try:
                 trades = await client.futures_account_trades(limit=10)
@@ -106,7 +93,6 @@ async def check_slave_account(slave_id: str = None):
             except Exception as e:
                 logger.error(f"Error fetching trades: {e}")
             
-            # Get recent orders
             logger.info("\n📋 RECENT ORDERS (Last 5):")
             try:
                 orders = await client.futures_get_all_orders(symbol='ETHUSDT', limit=5)
@@ -122,15 +108,12 @@ async def check_slave_account(slave_id: str = None):
             except Exception as e:
                 logger.error(f"Error fetching orders: {e}")
             
-            # Check account trading status
             logger.info("\n⚙️ ACCOUNT STATUS:")
             logger.info(f"Can Trade: {account_info.get('canTrade', False)}")
             logger.info(f"Can Withdraw: {account_info.get('canWithdraw', False)}")
             logger.info(f"Can Deposit: {account_info.get('canDeposit', False)}")
             
-            # Check if account is using testnet
             try:
-                # Try to get spot balance to see if this is testnet
                 spot_account = await client.get_account()
                 logger.info("\n🔍 ACCOUNT TYPE: LIVE (Production)")
             except Exception as e:
@@ -156,12 +139,10 @@ async def check_slave_account(slave_id: str = None):
                 logger.info("\nConnection closed")
 
 async def main():
-    """Main function"""
     logger.info("=" * 60)
     logger.info("BINANCE SLAVE ACCOUNT CHECK")
     logger.info("=" * 60)
     
-    # Load accounts to show available slaves
     with open(ACCOUNTS_FILE, 'r') as f:
         data = json.load(f)
     
