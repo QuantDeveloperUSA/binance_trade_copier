@@ -19,7 +19,6 @@ from config import (
     API_RATE_LIMIT_DELAY, LOG_LEVEL
 )
 
-# Setup logging
 logging.basicConfig(
     level=LOG_LEVEL,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -30,14 +29,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
 app = FastAPI(title="Binance Trade Copier")
 templates = Jinja2Templates(directory="templates")
 
-# Health check endpoint for deployment verification
 @app.get("/health")
 async def health_check() -> dict:
-    """Health check endpoint for deployment verification"""
     return {
         "status": "healthy",
         "service": "Binance Trade Copier",
@@ -46,16 +42,14 @@ async def health_check() -> dict:
         "active_connections": len(active_connections)
     }
 
-# Global variables
 active_connections: Dict[str, AsyncClient] = {}
 socket_managers: Dict[str, BinanceSocketManager] = {}
 copying_active = False
 master_positions: Dict[str, Dict] = {}
 
-# Pydantic models
 class Account(BaseModel):
     id: str
-    type: str  # "master" or "slave"
+    type: str
     api_key: str
     api_secret: str
     multiplier: float = 1.0
@@ -72,9 +66,7 @@ class TradeRecord(BaseModel):
     status: str
     error: Optional[str] = None
 
-# File operations
 def ensure_data_files():
-    """Ensure all required data files exist"""
     DATA_DIR.mkdir(exist_ok=True)
     
     if not ACCOUNTS_FILE.exists():
@@ -90,43 +82,34 @@ def ensure_data_files():
             json.dump({"copying_active": False, "started_at": None}, f, indent=2)
 
 def load_accounts() -> List[Dict]:
-    """Load accounts from JSON file"""
     with open(ACCOUNTS_FILE, 'r') as f:
         data = json.load(f)
     return data.get('accounts', [])
 
 def save_accounts(accounts: List[Dict]):
-    """Save accounts to JSON file"""
     with open(ACCOUNTS_FILE, 'w') as f:
         json.dump({"accounts": accounts}, f, indent=2)
 
 def save_trade(trade_data: Dict):
-    """Save trade record to JSON file"""
     with open(TRADES_FILE, 'r+') as f:
         trades = json.load(f)
         trades['trades'].append(trade_data)
-        # Keep only last 1000 trades
         trades['trades'] = trades['trades'][-1000:]
         f.seek(0)
         f.truncate()
         json.dump(trades, f, indent=2)
 
 def update_system_state(copying: bool):
-    """Update system state"""
     with open(SYSTEM_FILE, 'w') as f:
         json.dump({
             "copying_active": copying,
             "started_at": datetime.now().isoformat() if copying else None
         }, f, indent=2)
 
-# Trading functions
 async def get_account_balance(client: AsyncClient) -> float:
-    """Get futures account balance"""
     try:
         account_info = await client.futures_account()
-        # Use totalWalletBalance for the total balance including unrealized PnL
         balance = float(account_info.get('totalWalletBalance', 0))
-        # If totalWalletBalance is 0, try availableBalance
         if balance == 0:
             balance = float(account_info.get('availableBalance', 0))
         return balance
@@ -142,7 +125,6 @@ async def get_account_balance(client: AsyncClient) -> float:
         raise
 
 async def get_account_history(client: AsyncClient, account_type: str) -> Dict:
-    """Get comprehensive account history"""
     history = {
         "balance_history": [],
         "trade_history": [],
@@ -152,10 +134,8 @@ async def get_account_history(client: AsyncClient, account_type: str) -> Dict:
     }
     
     try:
-        # Get current account info
         account_info = await client.futures_account()
         
-        # Get balance info
         history["current_balance"] = {
             "total": float(account_info.get('totalWalletBalance', 0)),
             "available": float(account_info.get('availableBalance', 0)),
@@ -163,7 +143,6 @@ async def get_account_history(client: AsyncClient, account_type: str) -> Dict:
             "unrealized_pnl": float(account_info.get('totalUnrealizedProfit', 0))
         }
         
-        # Get open positions
         positions = account_info.get('positions', [])
         for pos in positions:
             if float(pos.get('positionAmt', 0)) != 0:
@@ -176,7 +155,6 @@ async def get_account_history(client: AsyncClient, account_type: str) -> Dict:
                     "side": "LONG" if float(pos.get('positionAmt', 0)) > 0 else "SHORT"
                 })
         
-        # Get recent trades (last 7 days)
         try:
             trades = await client.futures_account_trades(limit=100)
             for trade in trades:
@@ -192,9 +170,7 @@ async def get_account_history(client: AsyncClient, account_type: str) -> Dict:
         except Exception as e:
             logger.error(f"Error fetching trade history: {e}")
         
-        # Get deposit/withdraw history (spot wallet)
         try:
-            # Check spot deposit history
             deposits = await client.get_deposit_history()
             if deposits:
                 for dep in deposits:
@@ -207,7 +183,6 @@ async def get_account_history(client: AsyncClient, account_type: str) -> Dict:
         except Exception as e:
             logger.error(f"Error fetching deposit history: {e}")
         
-        # Get income history (funding fees, commissions, etc.)
         try:
             income = await client.futures_income_history(limit=100)
             for inc in income:
@@ -231,7 +206,6 @@ async def get_account_history(client: AsyncClient, account_type: str) -> Dict:
     return history
 
 async def copy_to_slaves(trade_data: Dict, master_id: str):
-    """Copy master trade to all active slaves"""
     if trade_data['e'] != 'ORDER_TRADE_UPDATE':
         return
     
@@ -246,14 +220,12 @@ async def copy_to_slaves(trade_data: Dict, master_id: str):
     
     logger.info(f"Master {master_id} executed: {side} {quantity} {symbol} @ {price}")
     
-    # Get master balance
     master_client = active_connections.get(master_id)
     if not master_client:
         return
     
     master_balance = await get_account_balance(master_client)
     
-    # Copy to each slave
     accounts = load_accounts()
     slaves = [acc for acc in accounts if acc['type'] == 'slave' and acc['active']]
     
@@ -265,7 +237,6 @@ async def copy_to_slaves(trade_data: Dict, master_id: str):
             continue
         
         try:
-            # Calculate slave quantity using the correct function signature
             slave_qty = await calculate_slave_quantity(
                 slave, quantity, symbol, slave_client
             )
@@ -274,7 +245,6 @@ async def copy_to_slaves(trade_data: Dict, master_id: str):
                 logger.warning(f"Skipping trade for slave {slave_id}: calculated quantity is 0")
                 continue
             
-            # Place slave order
             order_params = {
                 'symbol': symbol,
                 'side': side,
@@ -282,15 +252,12 @@ async def copy_to_slaves(trade_data: Dict, master_id: str):
                 'quantity': slave_qty
             }
             
-            # Check position mode for the slave
             position_mode = await slave_client.futures_get_position_mode()
             if position_mode.get('dualSidePosition', False):
-                # In hedge mode, need to specify position side
                 order_params['positionSide'] = 'LONG' if side == 'BUY' else 'SHORT'
             
             order = await slave_client.futures_create_order(**order_params)
             
-            # Record successful trade
             trade_record = {
                 "timestamp": datetime.now().isoformat(),
                 "master_id": master_id,
@@ -306,7 +273,6 @@ async def copy_to_slaves(trade_data: Dict, master_id: str):
             logger.info(f"Slave {slave_id} copied: {side} {slave_qty} {symbol}")
             
         except BinanceAPIException as e:
-            # Record failed trade
             trade_record = {
                 "timestamp": datetime.now().isoformat(),
                 "master_id": master_id,
@@ -325,11 +291,9 @@ async def copy_to_slaves(trade_data: Dict, master_id: str):
             import traceback
             logger.error(traceback.format_exc())
         
-        # Rate limit delay
         await asyncio.sleep(API_RATE_LIMIT_DELAY)
 
 async def monitor_master(master_id: str, api_key: str, api_secret: str):
-    """Monitor master account for trades"""
     global copying_active
     
     try:
@@ -339,7 +303,6 @@ async def monitor_master(master_id: str, api_key: str, api_secret: str):
         bm = BinanceSocketManager(client)
         socket_managers[master_id] = bm
         
-        # Start user data stream
         async with bm.futures_user_socket() as stream:
             logger.info(f"Started monitoring master {master_id}")
             
@@ -363,7 +326,6 @@ async def monitor_master(master_id: str, api_key: str, api_secret: str):
             del socket_managers[master_id]
 
 async def connect_slave(slave_id: str, api_key: str, api_secret: str):
-    """Connect slave account"""
     try:
         client = await AsyncClient.create(api_key, api_secret)
         active_connections[slave_id] = client
@@ -371,64 +333,48 @@ async def connect_slave(slave_id: str, api_key: str, api_secret: str):
     except Exception as e:
         logger.error(f"Failed to connect slave {slave_id}: {e}")
 
-# Quantity calculation function
 async def calculate_slave_quantity(slave_account: Dict, master_quantity: float, symbol: str, client: AsyncClient) -> float:
-    """Calculate the appropriate quantity for a slave account based on risk management"""
     try:
-        # Get slave account balance
         account_info = await client.futures_account()
         balance = float(account_info.get('totalWalletBalance', 0))
         
-        # Get current price
         ticker = await client.futures_symbol_ticker(symbol=symbol)
         current_price = float(ticker['price'])
         
-        # Calculate position value
         master_position_value = master_quantity * current_price
         
-        # Apply risk percentage
         risk_percentage = slave_account.get('risk_percentage', 1.0) / 100.0
         max_position_value = balance * risk_percentage
         
-        # Calculate slave quantity
         if master_position_value > max_position_value:
-            # Scale down to match risk limit
             slave_quantity = max_position_value / current_price
         else:
-            # Use same quantity as master
             slave_quantity = master_quantity
         
-        # Round to appropriate decimals (3 for most cryptos)
         slave_quantity = round(slave_quantity, 3)
         
-        # Check minimum notional value (Binance minimum is $20)
         min_notional = 20.0
         if slave_quantity * current_price < min_notional:
             logger.warning(f"Calculated quantity {slave_quantity} is below minimum notional ${min_notional}")
-            slave_quantity = round(min_notional / current_price * 1.1, 3)  # Add 10% buffer
+            slave_quantity = round(min_notional / current_price * 1.1, 3)
         
         logger.info(f"Calculated slave quantity: {slave_quantity} (master: {master_quantity})")
         return slave_quantity
         
     except Exception as e:
         logger.error(f"Error calculating slave quantity: {e}")
-        # Return 0 to skip this trade
         return 0
 
-# API Endpoints
 @app.on_event("startup")
 async def startup_event():
-    """Initialize system on startup"""
     ensure_data_files()
     logger.info("Binance Trade Copier started")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Cleanup on shutdown"""
     global copying_active
     copying_active = False
     
-    # Close all connections
     for client in active_connections.values():
         await client.close_connection()
     
@@ -436,21 +382,17 @@ async def shutdown_event():
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    """Serve main page"""
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/api/accounts")
 async def get_accounts():
-    """Get all accounts"""
     accounts = load_accounts()
     return {"accounts": accounts}
 
 @app.post("/api/accounts")
 async def add_account(account: Account):
-    """Add new account"""
     accounts = load_accounts()
     
-    # Check if ID already exists
     if any(acc['id'] == account.id for acc in accounts):
         raise HTTPException(status_code=400, detail="Account ID already exists")
     
@@ -461,12 +403,10 @@ async def add_account(account: Account):
 
 @app.delete("/api/accounts/{account_id}")
 async def delete_account(account_id: str):
-    """Delete account"""
     accounts = load_accounts()
     accounts = [acc for acc in accounts if acc['id'] != account_id]
     save_accounts(accounts)
     
-    # Disconnect if connected
     if account_id in active_connections:
         await active_connections[account_id].close_connection()
         del active_connections[account_id]
@@ -475,7 +415,6 @@ async def delete_account(account_id: str):
 
 @app.post("/api/start")
 async def start_copying():
-    """Start copy trading"""
     global copying_active
     
     if copying_active:
@@ -488,13 +427,11 @@ async def start_copying():
     masters = [acc for acc in accounts if acc['type'] == 'master' and acc['active']]
     slaves = [acc for acc in accounts if acc['type'] == 'slave' and acc['active']]
     
-    # Connect slaves first
     for slave in slaves:
         asyncio.create_task(connect_slave(
             slave['id'], slave['api_key'], slave['api_secret']
         ))
     
-    # Start monitoring masters
     for master in masters:
         asyncio.create_task(monitor_master(
             master['id'], master['api_key'], master['api_secret']
@@ -504,30 +441,25 @@ async def start_copying():
 
 @app.post("/api/stop")
 async def stop_copying():
-    """Stop copy trading"""
     global copying_active
     
     copying_active = False
     update_system_state(False)
     
-    # Connections will be closed by monitor tasks
     
     return {"message": "Copy trading stopped"}
 
 @app.get("/api/status")
 async def get_status():
-    """Get system status"""
     with open(SYSTEM_FILE, 'r') as f:
         system_state = json.load(f)
     
-    # Get connection status and balances
     connection_status = {}
     accounts = load_accounts()
     
     for account in accounts:
         account_id = account['id']
         
-        # Check if already connected
         if account_id in active_connections:
             try:
                 balance = await get_account_balance(active_connections[account_id])
@@ -542,16 +474,13 @@ async def get_status():
                     "error": str(e)
                 }
         else:
-            # Try to connect temporarily just to get balance
             try:
-                # You can switch to testnet by uncommenting the next line
-                # client = await AsyncClient.create(account['api_key'], account['api_secret'], testnet=True)
                 temp_client = await AsyncClient.create(account['api_key'], account['api_secret'])
                 balance = await get_account_balance(temp_client)
                 await temp_client.close_connection()
                 
                 connection_status[account_id] = {
-                    "connected": False,  # Not persistently connected
+                    "connected": False,
                     "balance": balance,
                     "available": True
                 }
@@ -577,7 +506,6 @@ async def get_status():
 
 @app.get("/api/trades")
 async def get_trades(limit: int = 100):
-    """Get recent trades"""
     with open(TRADES_FILE, 'r') as f:
         trades = json.load(f)
     
@@ -586,7 +514,6 @@ async def get_trades(limit: int = 100):
 
 @app.get("/api/accounts/{account_id}/history")
 async def get_account_history_endpoint(account_id: str):
-    """Get account history for a specific account"""
     accounts = load_accounts()
     account = next((acc for acc in accounts if acc['id'] == account_id), None)
     
@@ -594,7 +521,6 @@ async def get_account_history_endpoint(account_id: str):
         raise HTTPException(status_code=404, detail="Account not found")
     
     try:
-        # Create temporary client if not connected
         if account_id in active_connections:
             client = active_connections[account_id]
         else:
@@ -602,7 +528,6 @@ async def get_account_history_endpoint(account_id: str):
         
         history = await get_account_history(client, account['type'])
         
-        # Close temporary client
         if account_id not in active_connections:
             await client.close_connection()
         
@@ -613,7 +538,6 @@ async def get_account_history_endpoint(account_id: str):
 
 @app.get("/api/accounts/{account_id}/balance")
 async def get_account_balance_endpoint(account_id: str):
-    """Get detailed balance for a specific account"""
     accounts = load_accounts()
     account = next((acc for acc in accounts if acc['id'] == account_id), None)
     
@@ -621,7 +545,6 @@ async def get_account_balance_endpoint(account_id: str):
         raise HTTPException(status_code=404, detail="Account not found")
     
     try:
-        # Create temporary client if not connected
         if account_id in active_connections:
             client = active_connections[account_id]
         else:
@@ -637,7 +560,6 @@ async def get_account_balance_endpoint(account_id: str):
             "assets": []
         }
         
-        # Get individual asset balances
         for asset in account_info.get('assets', []):
             if float(asset.get('walletBalance', 0)) > 0:
                 balance_details["assets"].append({
@@ -646,7 +568,6 @@ async def get_account_balance_endpoint(account_id: str):
                     "unrealized_pnl": float(asset.get('unrealizedProfit', 0))
                 })
         
-        # Close temporary client
         if account_id not in active_connections:
             await client.close_connection()
         
@@ -663,12 +584,10 @@ if __name__ == "__main__":
         logger.info("=" * 50)
         logger.info("Initializing application...")
         
-        # Verify data directory exists
         if not DATA_DIR.exists():
             logger.info(f"Creating data directory: {DATA_DIR}")
             DATA_DIR.mkdir(parents=True, exist_ok=True)
         
-        # Check if data files exist
         for file_path, default_content in [
             (ACCOUNTS_FILE, "{}"),
             (TRADES_FILE, "[]"),
@@ -690,5 +609,5 @@ if __name__ == "__main__":
         logger.error("Check the error details above")
         import traceback
         logger.error(traceback.format_exc())
-        input("Press Enter to exit...")  # Keep console open to see error
+        input("Press Enter to exit...")
         raise
