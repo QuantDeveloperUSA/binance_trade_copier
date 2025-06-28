@@ -17,31 +17,51 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SERVER_SSH_KEY }}
         script: |
-          cd C:\binance_trade_copier
-          git fetch origin main
-          git reset --hard origin/main
-          echo "✅ Successfully pulled latest changes to server"
-          taskkill /F /IM python.exe 2>nul || echo "No Python process to kill"
-          timeout /t 2 /nobreak >nul
-          powershell -Command "Start-Process python -ArgumentList 'main.py' -WindowStyle Hidden"
-          
-          echo "✅ Server restarted successfully"
+          # Execute the deployment script
+          powershell -ExecutionPolicy Bypass -File "C:\binance_trade_copier\deploy.ps1" -ProjectPath "C:\binance_trade_copier"
     
-    - name: Verify deployment
+    - name: Verify deployment (alternative check)
       uses: appleboy/ssh-action@v1.0.0
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SERVER_SSH_KEY }}
         script: |
-          cd C:\binance_trade_copier
-          for /f %%i in ('git rev-parse HEAD') do echo Current commit: %%i
-          
-          rem Check if Python process is running
-          tasklist /FI "IMAGENAME eq python.exe" 2>nul | find /I "python.exe" >nul
-          if %ERRORLEVEL% equ 0 (
-            echo "✅ Server is running"
-          ) else (
-            echo "❌ Server is not running"
-            exit /b 1
-          )
+          # Quick verification if the main script fails
+          powershell -Command "
+            Write-Host 'Running alternative verification...'
+            
+            # Test health endpoint one more time
+            try {
+              \$response = Invoke-WebRequest -Uri 'http://localhost:8000/health' -UseBasicParsing -TimeoutSec 5
+              Write-Host '✅ Final health check: OK'
+              Write-Host \$response.Content
+            } catch {
+              Write-Host '❌ Final health check: FAILED'
+              Write-Host \$_.Exception.Message
+              
+              # Show Python processes
+              \$pythonProcs = Get-Process -Name python -ErrorAction SilentlyContinue
+              if (\$pythonProcs) {
+                Write-Host 'Python processes running:'
+                \$pythonProcs | ForEach-Object { Write-Host \"  PID: \$(\$_.Id), StartTime: \$(\$_.StartTime)\" }
+              } else {
+                Write-Host 'No Python processes found'
+              }
+              
+              # Show what is listening on port 8000
+              try {
+                \$connections = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue
+                if (\$connections) {
+                  Write-Host 'Port 8000 connections:'
+                  \$connections | ForEach-Object { Write-Host \"  State: \$(\$_.State), PID: \$(\$_.OwningProcess)\" }
+                } else {
+                  Write-Host 'No connections on port 8000'
+                }
+              } catch {
+                Write-Host 'Could not check port 8000'
+              }
+              
+              exit 1
+            }
+          "
