@@ -51,23 +51,35 @@ try {
     # Git operations (unless skipped)
     if (-not $SkipGitPull) {
         Write-Status "Fetching latest changes from main branch..."
-        $fetchResult = git fetch origin main 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Exit-WithError "Failed to fetch from origin: $fetchResult"
+        try {
+            $fetchResult = git fetch origin main 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Exit-WithError "Failed to fetch from origin: $fetchResult"
+            }
+            Write-Status "Fetch completed successfully"
+        } catch {
+            Exit-WithError "Exception during git fetch: $($_.Exception.Message)"
         }
-        Write-Status "Fetch completed successfully"
         
         Write-Status "Resetting to latest main branch..."
-        $resetResult = git reset --hard origin/main 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Exit-WithError "Failed to reset to origin/main: $resetResult"
+        try {
+            $resetResult = git reset --hard origin/main 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Exit-WithError "Failed to reset to origin/main: $resetResult"
+            }
+            Write-Status "Reset completed successfully"
+        } catch {
+            Exit-WithError "Exception during git reset: $($_.Exception.Message)"
         }
-        Write-Status "Reset completed successfully"
         
         # Show current commit
-        $currentCommit = git rev-parse HEAD
-        $shortCommit = git rev-parse --short HEAD
-        Write-Status "Current commit: $shortCommit ($currentCommit)"
+        try {
+            $currentCommit = git rev-parse HEAD
+            $shortCommit = git rev-parse --short HEAD
+            Write-Status "Current commit: $shortCommit ($currentCommit)"
+        } catch {
+            Write-Status "Could not retrieve git commit information" "WARNING"
+        }
     } else {
         Write-Status "Skipping git pull operations" "WARNING"
     }
@@ -75,15 +87,19 @@ try {
     # Stop existing Python processes (unless skipped)
     if (-not $SkipRestart) {
         Write-Status "Stopping existing Python processes..."
-        $pythonProcesses = Get-Process -Name python -ErrorAction SilentlyContinue
-        if ($pythonProcesses) {
-            $pythonProcesses | ForEach-Object {
-                Write-Status "Stopping Python process (PID: $($_.Id))"
-                Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+        try {
+            $pythonProcesses = Get-Process -Name python -ErrorAction SilentlyContinue
+            if ($pythonProcesses) {
+                $pythonProcesses | ForEach-Object {
+                    Write-Status "Stopping Python process (PID: $($_.Id))"
+                    Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+                }
+                Write-Status "Stopped $($pythonProcesses.Count) Python process(es)"
+            } else {
+                Write-Status "No Python processes found to stop"
             }
-            Write-Status "Stopped $($pythonProcesses.Count) Python process(es)"
-        } else {
-            Write-Status "No Python processes found to stop"
+        } catch {
+            Write-Status "Error stopping Python processes: $($_.Exception.Message)" "WARNING"
         }
         
         # Wait for processes to terminate
@@ -91,9 +107,13 @@ try {
         Start-Sleep -Seconds 3
         
         # Verify all Python processes are stopped
-        $remainingProcesses = Get-Process -Name python -ErrorAction SilentlyContinue
-        if ($remainingProcesses) {
-            Write-Status "Warning: $($remainingProcesses.Count) Python processes still running" "WARNING"
+        try {
+            $remainingProcesses = Get-Process -Name python -ErrorAction SilentlyContinue
+            if ($remainingProcesses) {
+                Write-Status "Warning: $($remainingProcesses.Count) Python processes still running" "WARNING"
+            }
+        } catch {
+            Write-Status "Could not verify process termination" "WARNING"
         }
         
         # Start the application
