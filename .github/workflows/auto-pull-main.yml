@@ -20,7 +20,8 @@ jobs:
           cd C:\binance_trade_copier
           git fetch origin main
           git reset --hard origin/main
-          echo "✅ Successfully pulled latest changes to server"          taskkill /F /IM python.exe 2>nul || echo "No Python process to kill"
+          echo "✅ Successfully pulled latest changes to server"
+          taskkill /F /IM python.exe 2>nul || echo "No Python process to kill"
           timeout /t 2 /nobreak >nul
           powershell -Command "Start-Process python -ArgumentList 'main.py' -WindowStyle Hidden"
           
