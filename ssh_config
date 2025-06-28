@@ -1,0 +1,7 @@
+Host binance-trader-server
+    HostName 5.181.5.168
+    User trader
+    Port 22
+    IdentityFile C:\Users\flori\OneDrive\USA\ABFS_Inc\DevelopmentProjects\joseph_binance_trade_copier\github_actions_key
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null

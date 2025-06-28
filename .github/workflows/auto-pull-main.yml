@@ -1,0 +1,56 @@
+name: Auto Pull Main Branch
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  auto-pull:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Deploy to server via SSH
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        script: |
+          cd /binance_trade_copier
+          git fetch origin main
+          git reset --hard origin/main
+          echo "✅ Successfully pulled latest changes to server"
+          
+          # Restart the server (choose one based on your setup)
+          # For systemd service:
+          sudo systemctl restart binance-trade-copier
+          
+          # Or for PM2:
+          # pm2 restart binance-trade-copier
+          
+          # Or for Docker:
+          # docker-compose down && docker-compose up -d
+          
+          # Or direct Python restart:
+          pkill -f "python.*main.py" && nohup python main.py &
+          
+          echo "✅ Server restarted successfully"
+    
+    - name: Verify deployment
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        script: |
+          cd /binance_trade_copier
+          echo "Current commit: $(git rev-parse HEAD)"
+          
+          # Check if server is running (adjust based on your process)
+          if pgrep -f "python.*main.py" > /dev/null; then
+            echo "✅ Server is running"
+          else
+            echo "❌ Server is not running"
+            exit 1
+          fi
