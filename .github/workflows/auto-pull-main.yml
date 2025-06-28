@@ -21,18 +21,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           echo "✅ Successfully pulled latest changes to server"
-          
-          # Restart the server (choose one based on your setup)
-          # For systemd service:
-          sudo systemctl restart binance-trade-copier
-          
-          # Or for PM2:
-          # pm2 restart binance-trade-copier
-          
-          # Or for Docker:
-          # docker-compose down && docker-compose up -d
-          
-          # Or direct Python restart:
+
           pkill -f "python.*main.py" && nohup python main.py &
           
           echo "✅ Server restarted successfully"
